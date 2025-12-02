@@ -12,24 +12,26 @@ def format_int(val):
     return f"{int(val):,}".replace(",", ".")
 
 # ==================== FUNÇÃO AUXILIAR DE ESTILO ====================
-def display_styled_table(df):
+def display_styled_table(df, highlight_total=True, column_config=None):
     """
     Renderiza o dataframe aplicando estilo de destaque (Totalizador) na última linha.
     """
     if df.empty: return
 
     def highlight_total_row(row):
-        if row.name == (len(df) - 1): # Última linha
+        # Verifica se deve destacar E se é a última linha (assumindo Totalizador no fim)
+        if highlight_total and row.name == (len(df) - 1): 
             return ['background-color: #e6f3ff; font-weight: bold; color: #003366'] * len(row)
         return [''] * len(row)
 
     st.dataframe(
         df.style.apply(highlight_total_row, axis=1), 
         width="stretch", 
-        hide_index=True
+        hide_index=True,
+        column_config=column_config if column_config else {"#": st.column_config.TextColumn("#", width="small")}
     )
 
-def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
+def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=None):
     st.markdown("<h2 style='text-align: center; color: #003366;'>Eficiência & KPIs Avançados</h2>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
@@ -151,20 +153,49 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
         st.warning(f"Sem dados de inserções para o ano {titulo_matriz}.")
 
     # ==================== TABELA DETALHADA (AFETADA PELO FILTRO) ====================
+    # Inicializa DF para exportação
+    df_matriz_export = pd.DataFrame()
+
     with st.expander(f"Ver dados detalhados da Matriz ({titulo_matriz})", expanded=True):
         if not scatter_data.empty:
             df_table = scatter_data.copy()
             
+            # Formatação
             df_table["Faturamento_fmt"] = df_table["Faturamento"].apply(brl)
             df_table["Custo_Medio_fmt"] = df_table["Custo_Medio"].apply(brl)
             df_table["Insercoes_fmt"] = df_table["Insercoes"].apply(format_int)
             
+            # Seleção e Ordenação (Inserções ANTES de Faturamento)
+            # Ordem interna para processamento
             df_table = df_table[["cliente", "emissora", "Insercoes_fmt", "Faturamento_fmt", "Custo_Medio_fmt"]]
-            df_table.columns = ["Cliente", "Emissora", "Inserções", "Faturamento Total", "Custo Unitário (R$)"]
             
+            # Renomeia para UI
+            df_table.columns = ["Cliente", "Emissora", "Inserções", "Faturamento Total", "CMU"]
+            
+            # Ordena por Cliente
             df_table = df_table.sort_values("Cliente", ascending=True).reset_index(drop=True)
             
-            st.dataframe(df_table, width="stretch", height=300, hide_index=True)
+            # Display com Tooltip
+            display_styled_table(
+                df_table, 
+                highlight_total=False, # Matriz detalhada geralmente não tem totalizador de soma direta
+                column_config={
+                    "CMU": st.column_config.Column(
+                        label="CMU ℹ️",
+                        help="Custo Médio Unitário (Preço Médio Pago por Inserção)"
+                    )
+                }
+            )
+
+            # Preparação para Exportação (Cópia fiel + Renomeação solicitada)
+            df_matriz_export = scatter_data.copy()
+            # Reordena colunas RAW: Cliente, Emissora, Inserções, Faturamento, Custo
+            df_matriz_export = df_matriz_export[["cliente", "emissora", "Insercoes", "Faturamento", "Custo_Medio"]]
+            
+            # Renomeia para Excel
+            df_matriz_export.columns = ["Cliente", "Emissora", "Inserções", "Faturamento Total", "Custo Médio Unitário"]
+            df_matriz_export = df_matriz_export.sort_values("Cliente")
+            
         else:
             st.info("Sem dados para exibir na tabela.")
 
@@ -185,74 +216,93 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     grp_ano = grp_ano.reset_index()
     
     # Garante colunas dos anos base e comp se não existirem
-    for ano in [ano_base, ano_comp]:
+    # CORREÇÃO: Evitar duplicidade se anos forem iguais
+    anos_check = list(set([ano_base, ano_comp]))
+    
+    for ano in anos_check:
         if f"Faturamento_{ano}" not in grp_ano.columns: grp_ano[f"Faturamento_{ano}"] = 0.0
         if f"Insercoes_{ano}" not in grp_ano.columns: grp_ano[f"Insercoes_{ano}"] = 0.0
 
     # Calcula Yield Anual
-    grp_ano[f"Yield_{ano_base}"] = np.where(grp_ano[f"Insercoes_{ano_base}"] > 0, grp_ano[f"Faturamento_{ano_base}"] / grp_ano[f"Insercoes_{ano_base}"], 0.0)
-    grp_ano[f"Yield_{ano_comp}"] = np.where(grp_ano[f"Insercoes_{ano_comp}"] > 0, grp_ano[f"Faturamento_{ano_comp}"] / grp_ano[f"Insercoes_{ano_comp}"], 0.0)
+    for ano in anos_check:
+        grp_ano[f"Yield_{ano}"] = np.where(grp_ano[f"Insercoes_{ano}"] > 0, grp_ano[f"Faturamento_{ano}"] / grp_ano[f"Insercoes_{ano}"], 0.0)
 
-    # Ordena pelo Yield do último ano
-    grp_ano = grp_ano.sort_values(f"Yield_{ano_comp}", ascending=False)
+    # Ordena pelo Yield do último ano (ou ano base se for o único)
+    sort_year = ano_comp if f"Yield_{ano_comp}" in grp_ano.columns else ano_base
+    if f"Yield_{sort_year}" in grp_ano.columns:
+        grp_ano = grp_ano.sort_values(f"Yield_{sort_year}", ascending=False)
 
-    # Totalizador
-    if not grp_ano.empty:
-        sum_fat_a = grp_ano[f"Faturamento_{ano_base}"].sum()
-        sum_fat_b = grp_ano[f"Faturamento_{ano_comp}"].sum()
-        sum_ins_a = grp_ano[f"Insercoes_{ano_base}"].sum()
-        sum_ins_b = grp_ano[f"Insercoes_{ano_comp}"].sum()
+    # Totalizador (Condicionado ao botão)
+    if not grp_ano.empty and show_total:
+        total_row = {"emissora": "Totalizador"}
         
-        avg_yld_a = sum_fat_a / sum_ins_a if sum_ins_a > 0 else 0
-        avg_yld_b = sum_fat_b / sum_ins_b if sum_ins_b > 0 else 0
-        
-        row_total = {
-            "emissora": "Totalizador",
-            f"Faturamento_{ano_base}": sum_fat_a, f"Faturamento_{ano_comp}": sum_fat_b,
-            f"Insercoes_{ano_base}": sum_ins_a, f"Insercoes_{ano_comp}": sum_ins_b,
-            f"Yield_{ano_base}": avg_yld_a, f"Yield_{ano_comp}": avg_yld_b
-        }
-        grp_ano = pd.concat([grp_ano, pd.DataFrame([row_total])], ignore_index=True)
+        # Soma para Fat e Ins, Média para Yield (recalculada)
+        for ano in anos_check:
+            sum_fat = grp_ano[f"Faturamento_{ano}"].sum()
+            sum_ins = grp_ano[f"Insercoes_{ano}"].sum()
+            avg_yld = sum_fat / sum_ins if sum_ins > 0 else 0
+            
+            total_row[f"Faturamento_{ano}"] = sum_fat
+            total_row[f"Insercoes_{ano}"] = sum_ins
+            total_row[f"Yield_{ano}"] = avg_yld
+            
+        grp_ano = pd.concat([grp_ano, pd.DataFrame([total_row])], ignore_index=True)
 
     # Display Formatado
     tb_display = grp_ano.copy()
     
-    # Renomear colunas para exibição bonita lado a lado
-    cols_rename = {
-        "emissora": "Emissora",
-        f"Insercoes_{ano_base}": f"Inserções ({ano_base})",
-        f"Insercoes_{ano_comp}": f"Inserções ({ano_comp})",
-        f"Faturamento_{ano_base}": f"Faturamento ({ano_base})",
-        f"Faturamento_{ano_comp}": f"Faturamento ({ano_comp})",
-        f"Yield_{ano_base}": f"Yield Médio ({ano_base})",
-        f"Yield_{ano_comp}": f"Yield Médio ({ano_comp})"
-    }
+    # Dicionário de Renomeação
+    cols_rename = {"emissora": "Emissora"}
+    for ano in anos_check:
+        cols_rename[f"Insercoes_{ano}"] = f"Inserções ({ano})"
+        cols_rename[f"Faturamento_{ano}"] = f"Faturamento ({ano})"
+        cols_rename[f"Yield_{ano}"] = f"Yield Médio ({ano})"
+        
     tb_display = tb_display.rename(columns=cols_rename)
     
-    # Ordenação das colunas
-    cols_order = [
-        "Emissora", 
-        f"Inserções ({ano_base})", f"Inserções ({ano_comp})",
-        f"Faturamento ({ano_base})", f"Faturamento ({ano_comp})",
-        f"Yield Médio ({ano_base})", f"Yield Médio ({ano_comp})"
-    ]
+    # Ordenação das colunas - LÓGICA ANTI-CRASH (Se anos iguais, mostra só 1 kit de colunas)
+    if ano_base == ano_comp:
+         cols_order = [
+            "Emissora", 
+            f"Inserções ({ano_base})",
+            f"Faturamento ({ano_base})",
+            f"Yield Médio ({ano_base})"
+        ]
+    else:
+        cols_order = [
+            "Emissora", 
+            f"Inserções ({ano_base})", f"Inserções ({ano_comp})",
+            f"Faturamento ({ano_base})", f"Faturamento ({ano_comp})",
+            f"Yield Médio ({ano_base})", f"Yield Médio ({ano_comp})"
+        ]
+        
+    # Filtra apenas colunas que existem (segurança extra)
+    cols_order = [c for c in cols_order if c in tb_display.columns]
     tb_display = tb_display[cols_order]
     
     # Formatação
-    tb_display[f"Faturamento ({ano_base})"] = tb_display[f"Faturamento ({ano_base})"].apply(brl)
-    tb_display[f"Faturamento ({ano_comp})"] = tb_display[f"Faturamento ({ano_comp})"].apply(brl)
-    tb_display[f"Inserções ({ano_base})"] = tb_display[f"Inserções ({ano_base})"].apply(format_int)
-    tb_display[f"Inserções ({ano_comp})"] = tb_display[f"Inserções ({ano_comp})"].apply(format_int)
-    tb_display[f"Yield Médio ({ano_base})"] = tb_display[f"Yield Médio ({ano_base})"].apply(brl)
-    tb_display[f"Yield Médio ({ano_comp})"] = tb_display[f"Yield Médio ({ano_comp})"].apply(brl)
+    for col in tb_display.columns:
+        if "Faturamento" in col or "Yield" in col:
+            tb_display[col] = tb_display[col].apply(brl)
+        elif "Inserções" in col:
+            tb_display[col] = tb_display[col].apply(format_int)
     
-    display_styled_table(tb_display)
+    # Passamos o show_total como highlight_total
+    display_styled_table(tb_display, highlight_total=show_total)
 
     # ==================== EXPORTAÇÃO ====================
     st.divider()
     def get_filter_string():
         f = st.session_state 
-        return (f"Período: {f.get('filtro_ano_ini')}-{f.get('filtro_ano_fim')} | Meses: {', '.join(f.get('filtro_meses_lista', ['Todos']))}")
+        ano_ini = f.get("filtro_ano_ini", "N/A")
+        ano_fim = f.get("filtro_ano_fim", "N/A")
+        emis = ", ".join(f.get("filtro_emis", ["Todas"]))
+        execs = ", ".join(f.get("filtro_execs", ["Todos"]))
+        meses = ", ".join(f.get("filtro_meses_lista", ["Todos"]))
+        clientes = ", ".join(f.get("filtro_clientes", ["Todos"])) if f.get("filtro_clientes") else "Todos"
+        
+        return (f"Período (Ano): {ano_ini} a {ano_fim} | Meses: {meses} | "
+                f"Emissoras: {emis} | Executivos: {execs} | Clientes: {clientes}")
 
     if st.button("📥 Exportar Dados da Página", type="secondary"):
         st.session_state.show_efi_export = True
@@ -264,9 +314,9 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
         @st.dialog("Opções de Exportação - Eficiência")
         def export_dialog():
             table_options = {
-                "1. Matriz Eficiência (Dados Brutos)": {'df': scatter_data},
-                "1. Matriz Eficiência (Gráfico HTML)": {'fig': fig_scatter if not scatter_data.empty else None},
-                "2. Resumo por Emissora (Anual)": {'df': grp_ano}
+                "1. Matriz de Eficiência (Preço vs. Volume) (Dados)": {'df': df_matriz_export},
+                "1. Matriz de Eficiência (Preço vs. Volume) (Gráfico)": {'fig': fig_scatter if not scatter_data.empty else None},
+                "2. Resumo de Eficiência por Emissora (Comparativo Anual) (Dados)": {'df': tb_display} # Usa tb_display pq já está com nomes bonitos e ordem correta
             }
             
             available_options = [name for name, data in table_options.items() if (data.get('df') is not None and not data['df'].empty) or (data.get('fig') is not None)]
@@ -288,8 +338,21 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
             try:
                 filtro_str = get_filter_string()
-                zip_data = create_zip_package(tables_to_export, filtro_str)
-                st.download_button("Clique para baixar", data=zip_data, file_name="Dashboard_Eficiencia.zip", mime="application/zip", on_click=lambda: st.session_state.update(show_efi_export=False), type="secondary")
+                
+                # Nomes corretos para ZIP e Excel Interno
+                nome_interno_excel = "Dashboard_Eficiencia.xlsx"
+                zip_filename = "Dashboard_Eficiencia.zip"
+                
+                zip_data = create_zip_package(tables_to_export, filtro_str, excel_filename=nome_interno_excel)
+                
+                st.download_button(
+                    label="Clique para baixar", 
+                    data=zip_data, 
+                    file_name=zip_filename, 
+                    mime="application/zip", 
+                    on_click=lambda: st.session_state.update(show_efi_export=False), 
+                    type="secondary"
+                )
             except Exception as e:
                 st.error(f"Erro ao gerar ZIP: {e}")
 

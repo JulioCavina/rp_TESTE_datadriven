@@ -7,6 +7,7 @@ from datetime import datetime
 def aplicar_filtros(df, cookies):
     """
     Aplica filtros interativos no TOPO da página (Main Area).
+    Retorna os dados filtrados e as flags de configuração (Rótulos e Totalizador).
     """
 
     # ==================== NORMALIZAÇÃO ====================
@@ -62,7 +63,6 @@ def aplicar_filtros(df, cookies):
 
     # ==================== LÓGICA DE PERSISTÊNCIA (SESSION STATE) ====================
     
-    # LÓGICA ATUALIZADA: Pega o Menor e Maior ano da base automaticamente
     if anos_disponiveis:
         default_ini = min(anos_disponiveis)
         default_fim = max(anos_disponiveis)
@@ -90,6 +90,10 @@ def aplicar_filtros(df, cookies):
     if "filtro_show_labels" not in st.session_state:
         st.session_state["filtro_show_labels"] = True 
 
+    # NOVO: Estado do Totalizador
+    if "filtro_show_total" not in st.session_state:
+        st.session_state["filtro_show_total"] = True
+
     # --- CALLBACKS ---
     def reset_filtros_callback():
         st.session_state["filtro_ano_ini"] = default_ini
@@ -99,6 +103,7 @@ def aplicar_filtros(df, cookies):
         st.session_state["filtro_clientes"] = []
         st.session_state["filtro_meses_lista"] = meses_disponiveis_nomes
         st.session_state["filtro_show_labels"] = True
+        st.session_state["filtro_show_total"] = True # Reset Totalizador
         
         if cookies.get("app_filters"):
             del cookies["app_filters"] 
@@ -113,7 +118,6 @@ def aplicar_filtros(df, cookies):
         
     # ==================== WIDGETS NO TOPO (EXPANDER WIDE) ====================
     
-    # ATUALIZAÇÃO: Título sem emoji
     with st.expander("Filtros Globais (Clique para expandir)", expanded=False):
         
         # --- LINHA 1: PERÍODO E CATEGORIAS MACRO ---
@@ -138,28 +142,45 @@ def aplicar_filtros(df, cookies):
 
         st.markdown("---")
 
-        # --- LINHA 3: AÇÕES ---
+        # --- LINHA 3: AÇÕES (Atualizada com Totalizador) ---
         st.markdown("**Controles & Ações**")
         
-        c7, c8, c9, c10 = st.columns([1.5, 3, 0.8, 0.8])
+        # Ajuste de colunas para caber 4 botões + espaço
+        c7, c8, c9, c10, c11 = st.columns([1.2, 1.2, 1.5, 0.8, 0.8])
         
+        # Botão Rótulos
         with c7:
-            is_active = st.session_state["filtro_show_labels"]
-            if is_active:
-                btn_type = "primary"
-                btn_text = "Rótulos: Ativo"
+            is_active_lbl = st.session_state["filtro_show_labels"]
+            if is_active_lbl:
+                btn_type_lbl = "primary"
+                btn_text_lbl = "Rótulos: Ativo"
             else:
-                btn_type = "secondary"
-                btn_text = "Rótulos: Inativo"
+                btn_type_lbl = "secondary"
+                btn_text_lbl = "Rótulos: Inativo"
             
-            if st.button(btn_text, type=btn_type, key="btn_toggle_labels", use_container_width=True):
-                st.session_state["filtro_show_labels"] = not is_active
+            if st.button(btn_text_lbl, type=btn_type_lbl, key="btn_toggle_labels", help="Ativar/Desativar Rótulo de Dados", use_container_width=True):
+                st.session_state["filtro_show_labels"] = not is_active_lbl
                 st.rerun()
 
-        with c9:
+        # Botão Totalizador (Novo)
+        with c8:
+            is_active_tot = st.session_state["filtro_show_total"]
+            if is_active_tot:
+                btn_type_tot = "primary"
+                btn_text_tot = "Totalizador: Ativo"
+            else:
+                btn_type_tot = "secondary"
+                btn_text_tot = "Totalizador: Inativo"
+            
+            if st.button(btn_text_tot, type=btn_type_tot, key="btn_toggle_total", help="Ativar/Desativar linha Totalizadora", use_container_width=True):
+                st.session_state["filtro_show_total"] = not is_active_tot
+                st.rerun()
+
+        # Botões de Ação (YTD e Limpar)
+        with c10:
             st.button("YTD", type="secondary", help="Selecionar de Jan até Hoje", use_container_width=True, on_click=set_ytd_callback)
         
-        with c10:
+        with c11:
             st.button("Limpar", type="secondary", help="Resetar todos os filtros", use_container_width=True, on_click=reset_filtros_callback)
 
 
@@ -181,7 +202,9 @@ def aplicar_filtros(df, cookies):
     mes_ini = min(meses_sel_num) if meses_sel_num else 1
     mes_fim = max(meses_sel_num) if meses_sel_num else 12
     
+    # Flags de visualização
     show_labels = st.session_state["filtro_show_labels"]
+    show_total = st.session_state["filtro_show_total"]
     
     df_filtrado = df[
         (df["ano"].between(ano_1, ano_2)) &
@@ -203,10 +226,12 @@ def aplicar_filtros(df, cookies):
             "filtro_clientes": st.session_state["filtro_clientes"],
             "filtro_meses_lista": st.session_state["filtro_meses_lista"],
             "filtro_show_labels": st.session_state["filtro_show_labels"], 
+            "filtro_show_total": st.session_state["filtro_show_total"], # Salva no cookie
         }
         cookies["app_filters"] = json.dumps(current_filters)
         cookies.save()
     except Exception:
         pass
 
-    return df_filtrado, anos_sel, emis_sel, exec_sel, cli_sel, mes_ini, mes_fim, show_labels
+    # Retorna também o show_total
+    return df_filtrado, anos_sel, emis_sel, exec_sel, cli_sel, mes_ini, mes_fim, show_labels, show_total

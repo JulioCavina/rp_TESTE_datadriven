@@ -98,12 +98,16 @@ def get_top_client_info(df_base):
     nome_display = nome_full[:18] + "..." if len(nome_full) > 18 else nome_full
     return nome_full, valor, nome_display
 
-def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
+def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=None):
     # Aplica CSS para centralizar os cards e aproximar título/valor
     st.markdown(ST_METRIC_CENTER, unsafe_allow_html=True)
 
     # Título Centralizado
     st.markdown("<h2 style='text-align: center; color: #003366;'>Visão Geral</h2>", unsafe_allow_html=True)
+    
+    # REMOVIDO: Caption de data aqui (já existe no rodapé)
+    # if ultima_atualizacao:
+    #     st.caption(f"📅 Dados atualizados até: {ultima_atualizacao}")
     
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
@@ -367,8 +371,8 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
                     margin=dict(l=10, r=10, t=10, b=10),
                 )
                 
-                # Salva no dicionário para exportação (Ordem será controlada na montagem do dialog)
-                figs_share_dict[f"3. Share Emissora (Gráfico {ano_share})"] = fig_share
+                # NOME CORRIGIDO: 3. Share de Faturamento (Gráfico 202X)
+                figs_share_dict[f"3. Share de Faturamento (Gráfico {ano_share})"] = fig_share
                 
                 with cols_share[idx]:
                     st.plotly_chart(fig_share, width="stretch")
@@ -440,34 +444,42 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     if st.session_state.get("show_visao_geral_export", False):
         @st.dialog("Opções de Exportação - Visão Geral")
         def export_dialog():
-            df_share_exp = pd.DataFrame()
-            if not base_emis_raw.empty:
-                df_share_exp = base_emis_raw.copy() 
-
-            # MONTAGEM LINEAR DO DICIONÁRIO (Garante a ordem 1 -> 2 -> 3 -> 4)
+            # MONTAGEM LINEAR DO DICIONÁRIO (COM NOMES REAIS)
             final_ordered_options = {}
 
-            # 1. Evolução
+            # 1. Evolução (CORRIGIDO: Colunas e Nomes)
             if not evol_raw.empty:
-                final_ordered_options["1. Evolução Mensal (Dados)"] = {'df': evol_raw}
-                final_ordered_options["1. Evolução Mensal (Gráfico)"] = {'fig': fig_evol}
+                df_evol_exp = evol_raw[["ano", "meslabel", "mes", "faturamento", "insercoes"]].copy()
+                df_evol_exp.columns = ["Ano", "Mês", "Mês ID", "Faturamento", "Inserções"]
+                
+                final_ordered_options["1. Evolução Mensal de Faturamento e Inserções (Dados)"] = {'df': df_evol_exp}
+                final_ordered_options["1. Evolução Mensal de Faturamento e Inserções (Gráfico)"] = {'fig': fig_evol}
 
-            # 2. Emissora
+            # 2. Emissora (CORRIGIDO: Remover label_x)
             if not base_emis_raw.empty:
-                final_ordered_options["2. Fat. por Emissora (Dados)"] = {'df': base_emis_raw}
-                final_ordered_options["2. Fat. por Emissora (Gráfico)"] = {'fig': fig_emis if not base_emis_raw.empty else None}
+                df_emis_exp = base_emis_raw[["emissora", "ano", "faturamento"]].copy()
+                df_emis_exp.columns = ["Emissora", "Ano", "Faturamento"]
+                
+                final_ordered_options["2. Faturamento por Emissora (Dados)"] = {'df': df_emis_exp}
+                final_ordered_options["2. Faturamento por Emissora (Gráfico)"] = {'fig': fig_emis if not base_emis_raw.empty else None}
 
-            # 3. Share
-            if not df_share_exp.empty:
-                final_ordered_options["3. Share Emissora (Dados)"] = {'df': df_share_exp}
-                # Adiciona as roscas individuais AQUI para manter a ordem numérica
+            # 3. Share (CORRIGIDO: Remover label_x, usar estrutura limpa)
+            if not base_emis_raw.empty:
+                df_share_exp = base_emis_raw[["emissora", "ano", "faturamento"]].copy()
+                df_share_exp.columns = ["Emissora", "Ano", "Faturamento"]
+                
+                final_ordered_options["3. Share de Faturamento (Dados)"] = {'df': df_share_exp}
+                # Adiciona as roscas individuais
                 for name, fig in figs_share_dict.items():
                     final_ordered_options[name] = {'fig': fig}
 
-            # 4. Executivo
+            # 4. Executivo (CORRIGIDO: Remover label_x)
             if not base_exec_raw.empty:
-                final_ordered_options["4. Fat. por Executivo (Dados)"] = {'df': base_exec_raw}
-                final_ordered_options["4. Fat. por Executivo (Gráfico)"] = {'fig': fig_exec if not base_exec_raw.empty else None}
+                df_exec_exp = base_exec_raw[["executivo", "ano", "faturamento"]].copy()
+                df_exec_exp.columns = ["Executivo", "Ano", "Faturamento"]
+                
+                final_ordered_options["4. Faturamento por Executivo (Dados)"] = {'df': df_exec_exp}
+                final_ordered_options["4. Faturamento por Executivo (Gráfico)"] = {'fig': fig_exec if not base_exec_raw.empty else None}
 
             # Filtra apenas o que tem conteúdo válido
             available_options = [k for k, v in final_ordered_options.items() if (v.get('df') is not None and not v['df'].empty) or (v.get('fig') is not None)]
@@ -479,8 +491,7 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
                     st.rerun()
                 return
 
-            st.write("Selecione os itens para exportar:")
-            selected_names = st.multiselect("Itens", options=available_options, default=available_options)
+            selected_names = st.multiselect("Selecione os itens para exportar:", options=available_options, default=available_options)
             
             tables_to_export = {name: final_ordered_options[name] for name in selected_names}
 
@@ -490,7 +501,11 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
             try:
                 filtro_str = get_filter_string()
-                zip_data = create_zip_package(tables_to_export, filtro_str) 
+                # NOME DO ARQUIVO EXCEL INTERNO
+                nome_interno_excel = "Dashboard_Visao_Geral.xlsx"
+                
+                zip_data = create_zip_package(tables_to_export, filtro_str, excel_filename=nome_interno_excel) 
+                
                 st.download_button("Clique para baixar o pacote", data=zip_data, file_name="Dashboard_VisaoGeral.zip", mime="application/zip", on_click=lambda: st.session_state.update(show_visao_geral_export=False), type="secondary")
             except Exception as e:
                 st.error(f"Erro ao gerar ZIP: {e}")

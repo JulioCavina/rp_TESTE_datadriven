@@ -22,7 +22,13 @@ def display_styled_table(df):
     if df.empty: return
 
     def highlight_total_row(row):
-        if row.name == (len(df) - 1): # Última linha (Totalizador)
+        # Tenta identificar pela coluna
+        is_total = False
+        if "Emissora" in df.columns and row["Emissora"] == "Totalizador": is_total = True
+        elif "Cliente" in df.columns and row["Cliente"] == "Totalizador": is_total = True
+        # CORREÇÃO: Removido o fallback que pintava a última linha sempre
+        
+        if is_total:
             return ['background-color: #e6f3ff; font-weight: bold; color: #003366'] * len(row)
         return [''] * len(row)
 
@@ -33,7 +39,7 @@ def display_styled_table(df):
         column_config={"#": st.column_config.TextColumn("#", width="small")}
     )
 
-def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
+def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=None):
     def format_pt_br_abrev(val):
         if pd.isna(val) or val == 0: return brl(0) 
         if val >= 1_000_000: return f"R$ {val/1_000_000:,.1f} Mi"
@@ -93,7 +99,7 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     compartilhados_mask = emis_count >= 2
 
     excl_info, comp_info, ausentes_info = [], [], []
-    fat_total_geral = agg["faturamento"].sum() # Faturamento total do mercado filtrado
+    fat_total_geral = agg["faturamento"].sum() 
 
     for emis in emissoras:
         # --- 1. EXCLUSIVOS ---
@@ -111,19 +117,14 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
         ins_comp = dados_comp["insercoes"].sum()
         
         # --- 3. AUSENTES (NOVO) ---
-        # Clientes que compraram na emissora atual
         clientes_emis = set(agg[agg["emissora"] == emis]["cliente"].unique())
-        # Clientes que NÃO compraram na emissora (mas compraram em outras)
         lista_ausentes = list(todos_clientes - clientes_emis)
-        
-        # Dados desses clientes ausentes (quanto eles gastaram no mercado)
         dados_ausentes = agg[agg["cliente"].isin(lista_ausentes)]
         
         fat_ausente = dados_ausentes["faturamento"].sum()
         ins_ausente = dados_ausentes["insercoes"].sum()
         qtd_ausentes = len(lista_ausentes)
 
-        # Totais da Emissora (para % relativa)
         dados_total = agg[agg["emissora"] == emis]
         fat_total_emis = dados_total["faturamento"].sum()
         
@@ -156,15 +157,21 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     if not df_excl_raw.empty:
         df_excl_raw = df_excl_raw.sort_values("Faturamento Exclusivo", ascending=False).reset_index(drop=True)
         
-        total_row = {
-            "Emissora": "Totalizador", 
-            "Clientes Exclusivos": df_excl_raw["Clientes Exclusivos"].sum(), 
-            "Faturamento Exclusivo": df_excl_raw["Faturamento Exclusivo"].sum(), 
-            "Inserções Exclusivas": df_excl_raw["Inserções Exclusivas"].sum(),
-            "% Faturamento": (df_excl_raw["Faturamento Exclusivo"].sum() / fat_total_geral * 100) if fat_total_geral > 0 else np.nan
-        }
-        df_excl_raw = pd.concat([df_excl_raw, pd.DataFrame([total_row])], ignore_index=True)
-        df_excl_raw.insert(0, "#", list(range(1, len(df_excl_raw))) + ["Total"])
+        # Lógica Totalizador
+        if show_total:
+            total_row = {
+                "Emissora": "Totalizador", 
+                "Clientes Exclusivos": df_excl_raw["Clientes Exclusivos"].sum(), 
+                "Faturamento Exclusivo": df_excl_raw["Faturamento Exclusivo"].sum(), 
+                "Inserções Exclusivas": df_excl_raw["Inserções Exclusivas"].sum(),
+                "% Faturamento": (df_excl_raw["Faturamento Exclusivo"].sum() / fat_total_geral * 100) if fat_total_geral > 0 else np.nan
+            }
+            df_excl_raw = pd.concat([df_excl_raw, pd.DataFrame([total_row])], ignore_index=True)
+        
+        if show_total:
+             df_excl_raw.insert(0, "#", list(range(1, len(df_excl_raw))) + ["Total"])
+        else:
+             df_excl_raw.insert(0, "#", list(range(1, len(df_excl_raw) + 1)))
         
         df_excl_display = df_excl_raw.copy()
         df_excl_display['#'] = df_excl_display['#'].astype(str)
@@ -182,15 +189,21 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     if not df_comp_raw.empty:
         df_comp_raw = df_comp_raw.sort_values("Faturamento Compartilhado", ascending=False).reset_index(drop=True)
         
-        total_row = {
-            "Emissora": "Totalizador", 
-            "Clientes Compartilhados": df_comp_raw["Clientes Compartilhados"].sum(), 
-            "Faturamento Compartilhado": df_comp_raw["Faturamento Compartilhado"].sum(), 
-            "Inserções Compartilhadas": df_comp_raw["Inserções Compartilhadas"].sum(),
-            "% Faturamento": (df_comp_raw["Faturamento Compartilhado"].sum() / fat_total_geral * 100) if fat_total_geral > 0 else np.nan
-        }
-        df_comp_raw = pd.concat([df_comp_raw, pd.DataFrame([total_row])], ignore_index=True)
-        df_comp_raw.insert(0, "#", list(range(1, len(df_comp_raw))) + ["Total"])
+        # Lógica Totalizador
+        if show_total:
+            total_row = {
+                "Emissora": "Totalizador", 
+                "Clientes Compartilhados": df_comp_raw["Clientes Compartilhados"].sum(), 
+                "Faturamento Compartilhado": df_comp_raw["Faturamento Compartilhado"].sum(), 
+                "Inserções Compartilhadas": df_comp_raw["Inserções Compartilhadas"].sum(),
+                "% Faturamento": (df_comp_raw["Faturamento Compartilhado"].sum() / fat_total_geral * 100) if fat_total_geral > 0 else np.nan
+            }
+            df_comp_raw = pd.concat([df_comp_raw, pd.DataFrame([total_row])], ignore_index=True)
+        
+        if show_total:
+             df_comp_raw.insert(0, "#", list(range(1, len(df_comp_raw))) + ["Total"])
+        else:
+             df_comp_raw.insert(0, "#", list(range(1, len(df_comp_raw) + 1)))
         
         df_comp_display = df_comp_raw.copy()
         df_comp_display['#'] = df_comp_display['#'].astype(str)
@@ -207,19 +220,23 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     df_ausentes_raw = pd.DataFrame(ausentes_info)
     
     if not df_ausentes_raw.empty:
-        # Ordena por quem tem mais dinheiro "na mesa" (Faturamento Perdido)
         df_ausentes_raw = df_ausentes_raw.sort_values("Faturamento Perdido (Oportunidade)", ascending=False).reset_index(drop=True)
         
-        # Totalizador (Soma Simples das colunas)
-        total_row = {
-            "Emissora": "Totalizador",
-            "Clientes Ausentes": df_ausentes_raw["Clientes Ausentes"].sum(),
-            "Faturamento Perdido (Oportunidade)": df_ausentes_raw["Faturamento Perdido (Oportunidade)"].sum(),
-            "Inserções Perdidas": df_ausentes_raw["Inserções Perdidas"].sum(),
-            "% Share Perdido": np.nan # Share somado não faz sentido aqui
-        }
-        df_ausentes_raw = pd.concat([df_ausentes_raw, pd.DataFrame([total_row])], ignore_index=True)
-        df_ausentes_raw.insert(0, "#", list(range(1, len(df_ausentes_raw))) + ["Total"])
+        # Lógica Totalizador
+        if show_total:
+            total_row = {
+                "Emissora": "Totalizador",
+                "Clientes Ausentes": df_ausentes_raw["Clientes Ausentes"].sum(),
+                "Faturamento Perdido (Oportunidade)": df_ausentes_raw["Faturamento Perdido (Oportunidade)"].sum(),
+                "Inserções Perdidas": df_ausentes_raw["Inserções Perdidas"].sum(),
+                "% Share Perdido": np.nan 
+            }
+            df_ausentes_raw = pd.concat([df_ausentes_raw, pd.DataFrame([total_row])], ignore_index=True)
+        
+        if show_total:
+             df_ausentes_raw.insert(0, "#", list(range(1, len(df_ausentes_raw))) + ["Total"])
+        else:
+             df_ausentes_raw.insert(0, "#", list(range(1, len(df_ausentes_raw) + 1)))
         
         df_ausentes_display = df_ausentes_raw.copy()
         df_ausentes_display['#'] = df_ausentes_display['#'].astype(str)
@@ -256,7 +273,7 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
         
         top_shared_raw["emissoras_compartilhadas"] = top_shared_raw["cliente"].map(df_emis_list)
 
-        if not top_shared_raw.empty:
+        if not top_shared_raw.empty and show_total:
             top_shared_raw = pd.concat([
                 top_shared_raw, 
                 pd.DataFrame([{
@@ -267,7 +284,10 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
                 }])
             ], ignore_index=True)
         
-        top_shared_raw.insert(0, "#", list(range(1, len(top_shared_raw))) + ["Total"])
+        if show_total:
+             top_shared_raw.insert(0, "#", list(range(1, len(top_shared_raw))) + ["Total"])
+        else:
+             top_shared_raw.insert(0, "#", list(range(1, len(top_shared_raw) + 1)))
         
         top_shared_disp = top_shared_raw.copy().rename(columns={
             "cliente": "Cliente", 
@@ -378,7 +398,6 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     st.divider()
 
     # ==================== 6. COMPARATIVO CUSTO UNITÁRIO ====================
-    # ATUALIZADO: Título novo e lógica de Totalizador Média
     st.subheader("6. Comparativo de Custo Médio Unitário (Clientes Compartilhados)")
     
     if compartilhados_mask.any():
@@ -407,32 +426,25 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
         pivot_cost = pivot_cost.sort_values("_sort_val", ascending=False).drop(columns="_sort_val")
         
         # --- CÁLCULO DA LINHA TOTALIZADORA (MÉDIA) ---
-        # Resetamos o índice para tratar 'cliente' como coluna
-        pivot_cost_reset = pivot_cost.reset_index()
+        df_final = pivot_cost.reset_index()
         
-        # Calcula média das colunas numéricas
-        mean_values = pivot_cost.mean(numeric_only=True)
-        
-        # Cria a linha de total
-        total_row_data = {"cliente": "Totalizador"}
-        for col in pivot_cost.columns:
-            total_row_data[col] = mean_values[col]
+        if show_total:
+            mean_values = pivot_cost.mean(numeric_only=True)
+            total_row_data = {"cliente": "Totalizador"}
+            for col in pivot_cost.columns:
+                total_row_data[col] = mean_values[col]
             
-        total_df = pd.DataFrame([total_row_data])
+            total_df = pd.DataFrame([total_row_data])
+            df_final = pd.concat([df_final, total_df], ignore_index=True)
         
-        # Concatena
-        df_final = pd.concat([pivot_cost_reset, total_df], ignore_index=True)
-        
-        # --- FORMATAÇÃO E EXIBIÇÃO ---
+        # --- FORMATAÇÃO ---
         pivot_cost_display = df_final.copy()
         pivot_cost_display = pivot_cost_display.rename(columns={"cliente": "Cliente"})
         
-        # Formata todas as colunas exceto 'Cliente'
         cols_to_fmt = [c for c in pivot_cost_display.columns if c != "Cliente"]
         for col in cols_to_fmt:
             pivot_cost_display[col] = pivot_cost_display[col].apply(lambda x: brl(x) if pd.notna(x) else "-")
             
-        # Exibe usando a função de estilo para pegar a formatação da última linha
         display_styled_table(pivot_cost_display)
         
     else:
@@ -460,15 +472,15 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     if st.session_state.get("show_cruzamentos_export", False):
         @st.dialog("Opções de Exportação - Cruzamentos")
         def export_dialog():
-            # Prepara DFs para exportação com nomes bonitos
+            # Títulos padronizados para Exportação
             table_options = {
-                "1. Clientes Exclusivos": {'df': df_excl_raw},
-                "2. Clientes Compartilhados": {'df': df_comp_raw},
-                "3. Clientes Ausentes": {'df': df_ausentes_raw}, # Novo
-                "4. Top Compartilhados": {'df': top_shared_raw},
-                "5. Matriz (Dados)": {'df': mat_raw.reset_index().rename(columns={'index':'Emissora'})},
-                "5. Matriz (Gráfico)": {'fig': fig_mat},
-                "6. Comparativo Custo Unitário": {'df': pivot_cost_display} 
+                "1. Clientes Exclusivos por Emissora (Dados)": {'df': df_excl_raw},
+                "2. Clientes Compartilhados por Emissora (Dados)": {'df': df_comp_raw},
+                "3. Clientes Ausentes por Emissora (Oportunidade) (Dados)": {'df': df_ausentes_raw}, 
+                "4. Top clientes compartilhados (2+ emissoras) (Dados)": {'df': top_shared_raw},
+                f"5. Interseções entre emissoras - {metric_label} (Dados)": {'df': mat_raw.reset_index().rename(columns={'index':'Emissora'})},
+                f"5. Interseções entre emissoras - {metric_label} (Gráfico)": {'fig': fig_mat},
+                "6. Comparativo de Custo Médio Unitário (Clientes Compartilhados) (Dados)": {'df': pivot_cost_display.reset_index()} 
             }
             
             available_options = [name for name, data in table_options.items() if (data.get('df') is not None and not data['df'].empty) or (data.get('fig') is not None and data['fig'].data)]
@@ -480,8 +492,7 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
                     st.rerun()
                 return
 
-            st.write("Selecione os itens para exportar:")
-            selected_names = st.multiselect("Itens", options=available_options, default=available_options)
+            selected_names = st.multiselect("Selecione os itens para exportar:", options=available_options, default=available_options)
             tables_to_export = {name: table_options[name] for name in selected_names}
             
             if not tables_to_export:
@@ -490,8 +501,21 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
             try:
                 filtro_str = get_filter_string()
-                zip_data = create_zip_package(tables_to_export, filtro_str)
-                st.download_button("Clique para baixar", data=zip_data, file_name="Dashboard_Cruzamentos.zip", mime="application/zip", on_click=lambda: st.session_state.update(show_cruzamentos_export=False), type="secondary")
+                
+                # Nomes ATUALIZADOS para ZIP e Excel Interno
+                nome_interno_excel = "Dashboard_Cruzamentos_Intersecoes.xlsx"
+                zip_filename = "Dashboard_Cruzamentos_Intersecoes.zip"
+                
+                zip_data = create_zip_package(tables_to_export, filtro_str, excel_filename=nome_interno_excel)
+                
+                st.download_button(
+                    label="Clique para baixar", 
+                    data=zip_data, 
+                    file_name=zip_filename, 
+                    mime="application/zip", 
+                    on_click=lambda: st.session_state.update(show_cruzamentos_export=False), 
+                    type="secondary"
+                )
             except Exception as e:
                 st.error(f"Erro ao gerar ZIP: {e}")
 

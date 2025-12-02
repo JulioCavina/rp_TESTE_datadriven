@@ -25,7 +25,6 @@ from utils.filters import aplicar_filtros
 from utils.format import normalize_dataframe
 
 # Importação das páginas
-# ATUALIZADO: 'crowley' removido, 'relatorio_abc' e 'eficiencia' adicionados
 from pages import inicio, visao_geral, clientes_faturamento, perdas_ganhos, cruzamentos_intersecoes, top10, relatorio_abc, eficiencia
 
 # ==================== CONFIGURAÇÕES GERAIS ====================
@@ -143,7 +142,7 @@ if os.path.exists(logo_path):
 query_params = st.query_params
 nav_id = query_params.get("nav", ["0"])[0]
 
-# ATUALIZADO: Lista de páginas com os nomes corretos
+# Lista de páginas
 pages_keys = ["Início", "Visão Geral", "Clientes & Faturamento", "Perdas & Ganhos", "Cruzamentos & Interseções", "Top 10", "Relatório ABC", "Eficiência"]
 
 try:
@@ -199,7 +198,6 @@ if df is None or df.empty:
 
 
 # ==================== MENU LATERAL ====================
-# ATUALIZADO: Mapeamento correto das páginas
 pages = {
     "Início": inicio,
     "Visão Geral": visao_geral,
@@ -207,8 +205,8 @@ pages = {
     "Perdas & Ganhos": perdas_ganhos,
     "Cruzamentos & Interseções": cruzamentos_intersecoes,
     "Top 10": top10,
-    "Relatório ABC": relatorio_abc, # Novo nome do módulo
-    "Eficiência": eficiencia, # Nova página
+    "Relatório ABC": relatorio_abc,
+    "Eficiência": eficiencia,
 }
 
 page_display = {
@@ -319,13 +317,16 @@ if st.session_state.authenticated:
 if pagina_ativa == "Início":
     pages[pagina_ativa].render(df) 
 else:
-    df_filtrado, anos_sel, emis_sel, exec_sel, cli_sel, mes_ini, mes_fim, show_labels = aplicar_filtros(df, cookies)
+    # APLICAR FILTROS AGORA RETORNA 'show_total'
+    df_filtrado, anos_sel, emis_sel, exec_sel, cli_sel, mes_ini, mes_fim, show_labels, show_total = aplicar_filtros(df, cookies)
 
     if df_filtrado is None or df_filtrado.empty:
         st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados.")
         st.stop()
     
-    pages[pagina_ativa].render(df_filtrado, mes_ini, mes_fim, show_labels, ultima_atualizacao)
+    # PASSAMOS 'show_total' PARA AS PÁGINAS
+    # Nota: As páginas precisarão atualizar suas assinaturas para receber este argumento
+    pages[pagina_ativa].render(df_filtrado, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao)
 
 # ==================== RODAPÉ ====================
 footer_html = """

@@ -1,7 +1,6 @@
 /*utils/style.css*/
 
-
-/* ==================== CUSTOMIZAÇÃO GERAL ==================== */
+/* ==================== CUSTOMIZAÇÃO GERAL (DESKTOP) ==================== */
 :root {
     --azul-nb: #007bff;
     --azul-escuro: #004a99;
@@ -40,8 +39,6 @@
 }
 
 /* ==================== FORÇAR BOTÕES AZUIS (NOVABRASIL) ==================== */
-/* Isso resolve a questão dos botões vermelhos no gráfico de matriz */
-
 /* Botão Primário (Ativo/Cheio) */
 button[kind="primary"] {
     background-color: var(--azul-nb) !important;
@@ -74,29 +71,23 @@ button[kind="secondary"]:hover, button[kind="secondary"]:focus {
     color: #666 !important;
     font-size: 0.85rem;
     font-weight: 600;
-    margin-bottom: 0px; /* Não empurrar muito pra baixo */
+    margin-bottom: 0px; 
     transition: all 0.2s;
 }
 .nav-back-link:hover {
     color: var(--azul-nb) !important;
-    transform: translateX(-3px); /* Efeito visual leve */
+    transform: translateX(-3px);
 }
 
 /* ==================== BARRA LATERAL (SIDEBAR) ==================== */
-
-/* Forçar largura menor da sidebar */
 [data-testid="stSidebar"] {
     min-width: 220px !important;
     max-width: 220px !important;
     width: 220px !important;
 }
-
-/* Reduzir fonte de todos os elementos da sidebar */
 [data-testid="stSidebar"] * {
     font-size: 0.85rem !important;
 }
-
-/* Botões de navegação na sidebar */
 .sidebar-nav-btn {
     display: block;
     padding: 8px 10px;
@@ -123,8 +114,6 @@ button[kind="secondary"]:hover, button[kind="secondary"]:focus {
     border-radius: 6px !important; 
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
-
-/* Texto auxiliar na sidebar */
 .sidebar-nav-container + div > p {
     font-size: 0.8rem; 
     font-weight: 600; 
@@ -141,13 +130,10 @@ button[kind="secondary"]:hover, button[kind="secondary"]:focus {
     font-weight: 600 !important;
     color: #003366 !important;
 }
-/* Botões dentro do modal seguem a regra global de secondary, 
-   mas garantimos o background branco aqui se necessário */
 [data-testid="stDialog"] button[kind="secondary"] {
     background-color: #ffffff !important;
     min-height: 40px !important;
 }
-
 [data-testid="stDialog"] [aria-label="Close"] svg {
     fill: #000 !important;
     stroke: #000 !important;
@@ -157,8 +143,6 @@ button[kind="secondary"]:hover, button[kind="secondary"]:focus {
     box-shadow: none !important;
     background-color: transparent !important;
 }
-
-/* Títulos do Modal */
 .popup-title-styled {
     color: #004a99;
     text-align: center;
@@ -205,21 +189,105 @@ label, .stMarkdown h3, .stMarkdown h4 {
     width: 100%;
     background-color: #f1f1f1;
     text-align: center;
-    padding: 8px 0; /* Reduzi o padding */
+    padding: 8px 0;
     font-size: 0.8rem;
     color: #555;
     border-top: 1px solid #ddd;
     z-index: 999;
 }
+.footer-text { margin: 0; padding: 0; line-height: 1.4; }
+.footer-date { font-weight: 600; color: #003366; margin-bottom: 4px; }
 
-.footer-text {
-    margin: 0;
-    padding: 0;
-    line-height: 1.4;
-}
 
-.footer-date {
-    font-weight: 600;
-    color: #003366;
-    margin-bottom: 4px;
+/* ========================================================================== */
+/* ====================  ÁREA EXCLUSIVA PARA MOBILE  ==================== */
+/* ========================================================================== */
+
+@media only screen and (max-width: 768px) {
+    
+    /* --- 1. MELHORIA GERAL DE ESPAÇAMENTO --- */
+    .block-container {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 2rem !important; /* Menos espaço no topo */
+    }
+
+    /* --- 2. GRID 2x2 PARA CARDS (METRICS) --- */
+    [data-testid="stMetric"] {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 10px 0;
+        margin-bottom: 10px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    [data-testid="column"] {
+        width: 50% !important;
+        flex: 1 1 50% !important;
+        min-width: 140px !important;
+        padding: 0 4px !important;
+    }
+    
+    /* Exceção: Colunas de filtros (Selectbox/Button) devem ocupar 100% */
+    [data-testid="stHorizontalBlock"] [data-testid="column"]:has([data-baseweb="select"]),
+    [data-testid="stHorizontalBlock"] [data-testid="column"]:has(button) {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+
+    /* --- 3. FONTES MENORES (Compactação) --- */
+    h1, h2 { font-size: 1.5rem !important; }
+    h3, .custom-chart-title { font-size: 1rem !important; }
+    p, label, .stMarkdown { font-size: 0.9rem !important; }
+    
+    /* --- 4. TABELAS (DATAFRAMES) --- */
+    [data-testid="stDataFrame"] {
+        font-size: 0.75rem !important;
+    }
+    
+    /* --- 5. SIDEBAR (MENU) MAIS TOCÁVEL --- */
+    .sidebar-nav-btn {
+        padding: 12px 10px !important;
+        font-size: 1rem !important;
+        margin-bottom: 8px !important;
+    }
+    
+    /* --- 6. GRÁFICOS (PLOTLY) --- */
+    .js-plotly-plot {
+        min-height: 350px !important;
+    }
+
+    /* --- 7. RODAPÉ (FOOTER) --- */
+    .footer-container {
+        font-size: 0.65rem;
+        padding: 5px 0;
+    }
+    
+    /* --- 8. LINK DE VOLTAR --- */
+    .nav-back-link {
+        font-size: 0.8rem;
+        padding: 10px;
+        background-color: #f0f2f6;
+        border-radius: 8px;
+        width: 100%;
+        justify-content: center;
+        margin-bottom: 10px;
+    }
+
+    /* --- 9. PÁGINA INÍCIO (BOTÕES) --- */
+    /* Sobrescreve o grid fixo do inicio.py para ser flexível e menor */
+    .nb-grid {
+        grid-template-columns: repeat(2, 1fr) !important; /* 2 Colunas Flexíveis */
+        grid-template-rows: auto !important; /* Altura automática */
+        gap: 10px !important; /* Menor espaçamento */
+        width: 100% !important;
+        padding: 0 5px !important;
+    }
+    
+    .nb-card {
+        width: 100% !important; /* Ocupa a célula do grid */
+        height: 85px !important; /* Altura reduzida (era 110px) */
+        font-size: 0.85rem !important; /* Fonte menor */
+        border-radius: 10px !important;
+    }
 }

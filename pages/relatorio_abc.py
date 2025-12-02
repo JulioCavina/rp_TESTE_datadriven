@@ -12,7 +12,8 @@ def format_int(val):
     if pd.isna(val) or val == 0: return "-"
     return f"{int(val):,}".replace(",", ".")
 
-def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
+# Agora aceita show_total (mesmo que não use explicitamente, evita erro)
+def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=None):
     # ==================== TÍTULO CENTRALIZADO ====================
     st.markdown("<h2 style='text-align: center; color: #003366;'>Relatório ABC (Pareto)</h2>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
@@ -28,7 +29,6 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     """, unsafe_allow_html=True)
 
     # Inicializa DF para exportação
-    df_abc_export = pd.DataFrame()
     fig_pie = None 
 
     # Normalização
@@ -179,17 +179,17 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
         df_display["faturamento_fmt"] = df_display["faturamento"].apply(brl)
         df_display["insercoes_fmt"] = df_display["insercoes"].apply(format_int)
         
-        # Custo Médio (ainda numérico para formatação via column_config se quisesse, mas vamos de string formatada)
+        # Custo Médio
         df_display["custo_fmt"] = df_display["custo_medio"].apply(lambda x: brl(x) if pd.notna(x) else "-")
         
-        # Seleção e Renomeação
+        # Seleção e Renomeação para EXIBIÇÃO
         cols_order = ["classe", "cliente", "faturamento_fmt", "insercoes_fmt", "custo_fmt", "share_fmt", "acum_fmt"]
         df_display = df_display[cols_order]
         df_display.columns = ["Classe", "Cliente", "Faturamento", "Inserções", "Custo Médio", "Share %", "% Acumulado"]
         
-        # Index virando Ranking
+        # Index virando Ranking (Agora RNK)
         df_display.index = range(1, len(df_display) + 1)
-        df_display.index.name = "Rank"
+        df_display.index.name = "RNK"
         
         # Configuração da Coluna "Custo Médio" (CMU)
         st.dataframe(
@@ -204,18 +204,22 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
             }
         )
         
-        # Guarda para exportação
-        df_abc_export = df_abc.copy()
-        df_abc_export.columns = ["Cliente", "Faturamento", "Inserções", "Share", "Acumulado", "Classe", "Custo Médio"]
-
     # ==================== EXPORTAÇÃO ====================
     st.divider()
+    
+    # 1. Filtro Padronizado
     def get_filter_string():
         f = st.session_state 
         ano_ini = f.get("filtro_ano_ini", "N/A")
         ano_fim = f.get("filtro_ano_fim", "N/A")
         emis = ", ".join(f.get("filtro_emis", ["Todas"]))
-        return (f"Período: {ano_ini}-{ano_fim} | Emissoras: {emis} | Critério ABC: {criterio}")
+        execs = ", ".join(f.get("filtro_execs", ["Todos"]))
+        meses = ", ".join(f.get("filtro_meses_lista", ["Todos"]))
+        clientes = ", ".join(f.get("filtro_clientes", ["Todos"])) if f.get("filtro_clientes") else "Todos"
+        
+        return (f"Período (Ano): {ano_ini} a {ano_fim} | Meses: {meses} | "
+                f"Emissoras: {emis} | Executivos: {execs} | Clientes: {clientes} | "
+                f"Critério ABC: {criterio}")
 
     if st.button("📥 Exportar Dados da Página", type="secondary"):
         st.session_state.show_abc_export = True
@@ -224,12 +228,47 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
         st.caption(f"📅 Última atualização da base de dados: {ultima_atualizacao}")
 
     if st.session_state.get("show_abc_export", False):
-        @st.dialog("Opções de Exportação - Curva ABC")
+        @st.dialog("Opções de Exportação - Relatório ABC")
         def export_dialog():
+            # 2. Preparação da Aba 1 (Distribuição) - Colunas Dinâmicas
+            df_dist_exp = resumo_classes.reset_index().rename(columns={"classe": "Classe", "Qtd_Clientes": "Qtd Clientes"})
+            
+            if criterio == "Faturamento":
+                # Se faturamento, remove inserções
+                df_dist_exp = df_dist_exp[["Classe", "Qtd Clientes", "Total_Faturamento"]]
+                df_dist_exp = df_dist_exp.rename(columns={"Total_Faturamento": "Faturamento Total"})
+            else:
+                # Se inserções, remove faturamento
+                df_dist_exp = df_dist_exp[["Classe", "Qtd Clientes", "Total_Insercoes"]]
+                df_dist_exp = df_dist_exp.rename(columns={"Total_Insercoes": "Inserções Totais"})
+            
+            # 3. Preparação da Aba 2 (Detalhamento) - Ordem e Nomes
+            # Copia do DF calculado
+            df_det_exp = df_abc.copy()
+            # Cria Ranking numérico
+            df_det_exp.index = range(1, len(df_det_exp) + 1)
+            df_det_exp = df_det_exp.reset_index() # RNK vira coluna "index"
+            
+            # Renomeia para nomes longos de exportação
+            df_det_exp = df_det_exp.rename(columns={
+                "index": "RNK",
+                "classe": "Classe",
+                "cliente": "Cliente",
+                "faturamento": "Faturamento",
+                "insercoes": "Inserções",
+                "custo_medio": "Custo Médio Unitário",
+                "share": "Share %",
+                "acumulado": "% Acumulado"
+            })
+            
+            # Ordena colunas igual à UI
+            cols_export_order = ["RNK", "Classe", "Cliente", "Faturamento", "Inserções", "Custo Médio Unitário", "Share %", "% Acumulado"]
+            df_det_exp = df_det_exp[cols_export_order]
+
             table_options = {
-                "1. Distribuição da Carteira (Dados)": {'df': resumo_classes.reset_index()},
-                "1. Distribuição da Carteira (Gráfico HTML)": {'fig': fig_pie},
-                "2. Detalhamento dos Clientes (Dados)": {'df': df_abc_export}
+                "1. Distribuição da Carteira (Dados)": {'df': df_dist_exp},
+                "1. Distribuição da Carteira (Gráfico)": {'fig': fig_pie}, 
+                "2. Detalhamento dos Clientes (Dados)": {'df': df_det_exp}
             }
             
             available_options = [name for name, data in table_options.items() if (data.get('df') is not None and not data['df'].empty) or (data.get('fig') is not None)]
@@ -241,8 +280,7 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
                     st.rerun()
                 return
 
-            st.write("Selecione os itens para exportar:")
-            selected_names = st.multiselect("Itens", options=available_options, default=available_options)
+            selected_names = st.multiselect("Selecione os itens para exportar:", options=available_options, default=available_options)
             tables_to_export = {name: table_options[name] for name in selected_names}
             
             if not tables_to_export:
@@ -251,8 +289,20 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
             try:
                 filtro_str = get_filter_string()
-                zip_data = create_zip_package(tables_to_export, filtro_str)
-                st.download_button("Clique para baixar", data=zip_data, file_name=f"Dashboard_ABC_{criterio}.zip", mime="application/zip", on_click=lambda: st.session_state.update(show_abc_export=False), type="secondary")
+                
+                # Nome Interno Fixo
+                nome_interno_excel = "Dashboard_Relatorio_ABC.xlsx"
+                
+                zip_data = create_zip_package(tables_to_export, filtro_str, excel_filename=nome_interno_excel)
+                
+                st.download_button(
+                    label="Clique para baixar", 
+                    data=zip_data, 
+                    file_name=f"Dashboard_Relatorio_ABC.zip", 
+                    mime="application/zip", 
+                    on_click=lambda: st.session_state.update(show_abc_export=False), 
+                    type="secondary"
+                )
             except Exception as e:
                 st.error(f"Erro ao gerar ZIP: {e}")
 

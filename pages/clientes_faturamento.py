@@ -36,14 +36,15 @@ def format_int(val):
         return str(val)
 
 # ==================== FUNÇÃO AUXILIAR DE EXIBIÇÃO (UNIFICADA) ====================
-def display_combined_table(df_main, df_total, format_dict=None, color_cols=None):
+def display_combined_table(df_main, df_total, format_dict=None, color_cols=None, show_total=True, column_config=None):
     """
-    Concatena df_main e df_total em um único DataFrame, aplica a estilização
-    na última linha (totalizador) e renderiza uma única tabela.
+    Concatena df_main e df_total SE show_total for True.
+    Aplica a estilização na última linha apenas se o total estiver presente.
+    Aceita column_config para customização de cabeçalhos e tooltips.
     """
     
     # 1. Concatenação (União das tabelas)
-    if not df_total.empty:
+    if show_total and not df_total.empty:
         # Garante que as colunas estejam alinhadas
         df_combined = pd.concat([df_main, df_total], ignore_index=True)
     else:
@@ -51,37 +52,56 @@ def display_combined_table(df_main, df_total, format_dict=None, color_cols=None)
 
     # 2. Definição da função de estilo para a linha de Total
     def highlight_total_row(row):
-        # Se df_total existe e estamos na última linha do dataframe combinado
-        if not df_total.empty and row.name == (len(df_combined) - 1):
+        # Só destaca se o total estiver ativado e for a última linha
+        if show_total and not df_total.empty and row.name == (len(df_combined) - 1):
             return ['background-color: #e6f3ff; font-weight: bold; color: #003366'] * len(row)
         return [''] * len(row)
 
     # 3. Aplicação dos estilos
-    # Primeiro aplicamos o destaque da linha total
+    # Primeiro aplicamos o destaque da linha total (se houver)
     styler = df_combined.style.apply(highlight_total_row, axis=1)
 
     # Depois aplicamos as cores condicionais (verde/vermelho) nas colunas de variação
     if color_cols:
         styler = styler.map(color_delta, subset=[c for c in color_cols if c in df_combined.columns])
 
-    # Se houver formatação numérica específica (embora a maioria já venha formatada como string)
+    # Se houver formatação numérica específica
     if format_dict:
         styler = styler.format(format_dict)
+
+    # Mescla configurações padrão com as passadas
+    final_config = {"#": st.column_config.TextColumn("#", width="small")}
+    if column_config:
+        final_config.update(column_config)
 
     # 4. Renderização
     st.dataframe(
         styler,
         hide_index=True, 
         width="stretch", 
-        column_config={"#": st.column_config.TextColumn("#", width="small")}
+        column_config=final_config
     )
 
     # Retorna o DF combinado para uso na exportação
     return df_combined
 
+# ==================== HELPER PARA TOOLTIPS DE CMU ====================
+def get_cmu_config(columns):
+    """Gera configuração de colunas para substituir 'Custo Médio Unitário' por 'CMU ℹ️'."""
+    config = {}
+    for col in columns:
+        if "Custo Médio Unitário" in col:
+            # Ex: "Custo Médio Unitário (2024)" -> "CMU 2024 ℹ️"
+            # Ex: "Custo Médio Unitário" -> "CMU ℹ️"
+            label = col.replace("Custo Médio Unitário", "CMU").replace("(", "").replace(")", "").strip() + " ℹ️"
+            config[col] = st.column_config.Column(
+                label=label,
+                help="Custo Médio Unitário"
+            )
+    return config
 
 # ==================== RENDERIZAÇÃO DA PÁGINA ====================
-def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
+def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=None):
     st.markdown("<h2 style='text-align: center; color: #003366;'>Clientes & Faturamento</h2>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
@@ -164,7 +184,11 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     df_1_total.insert(0, "#", ["Total"])
     
     # Renomeia
-    rename_1 = {"emissora": "Emissora"}
+    rename_1 = {
+        "emissora": "Emissora",
+        ano_base: f"Clientes {ano_base}",
+        ano_comp: f"Clientes {ano_comp}"
+    }
     df_1_main = df_1_main.rename(columns=rename_1)
     df_1_total = df_1_total.rename(columns=rename_1)
     
@@ -177,12 +201,13 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
     df_1_total["Δ%"] = df_1_total["Δ%"].apply(format_percent_col)
     df_1_main['#'] = df_1_main['#'].astype(str)
 
-    # EXIBE COMBINADO
+    # EXIBE COMBINADO (COM CONTROLE DO TOTAL)
     export_1 = display_combined_table(
         df_1_main, 
         df_1_total, 
         format_dict=None, 
-        color_cols=["Δ", "Δ%"]
+        color_cols=["Δ", "Δ%"],
+        show_total=show_total
     )
     st.divider()
 
@@ -223,6 +248,8 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
     rename_2 = {
         "emissora": "Emissora",
+        ano_base: f"Faturamento {ano_base}", 
+        ano_comp: f"Faturamento {ano_comp}",
         f"Ins_{ano_base}": f"Ins. {ano_base}", f"Ins_{ano_comp}": f"Ins. {ano_comp}",
         f"Custo_{ano_base}": f"Custo Médio Unitário ({ano_base})", f"Custo_{ano_comp}": f"Custo Médio Unitário ({ano_comp})"
     }
@@ -244,8 +271,10 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
     export_2 = display_combined_table(
         df_2_main, df_2_total,
-        format_dict={str(ano_base): brl, str(ano_comp): brl, "Δ": brl},
-        color_cols=["Δ", "Δ%"]
+        format_dict={f"Faturamento {ano_base}": brl, f"Faturamento {ano_comp}": brl, "Δ": brl},
+        color_cols=["Δ", "Δ%"],
+        show_total=show_total,
+        column_config=get_cmu_config(df_2_main.columns)
     )
     st.divider()
 
@@ -284,6 +313,8 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
     rename_3 = {
         "executivo": "Executivo",
+        ano_base: f"Faturamento {ano_base}",
+        ano_comp: f"Faturamento {ano_comp}",
         f"Ins_{ano_base}": f"Ins. {ano_base}", f"Ins_{ano_comp}": f"Ins. {ano_comp}",
         f"Custo_{ano_base}": f"Custo Médio Unitário ({ano_base})", f"Custo_{ano_comp}": f"Custo Médio Unitário ({ano_comp})"
     }
@@ -304,8 +335,10 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
     export_3 = display_combined_table(
         df_3_main, df_3_total,
-        format_dict={str(ano_base): brl, str(ano_comp): brl, "Δ": brl},
-        color_cols=["Δ", "Δ%"]
+        format_dict={f"Faturamento {ano_base}": brl, f"Faturamento {ano_comp}": brl, "Δ": brl},
+        color_cols=["Δ", "Δ%"],
+        show_total=show_total,
+        column_config=get_cmu_config(df_3_main.columns)
     )
     st.divider()
 
@@ -347,7 +380,7 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
             d["Média Inserções/Cliente"] = d["Média Inserções/Cliente"].apply(lambda x: f"{x:,.1f}" if pd.notna(x) else "-")
             d['#'] = d['#'].astype(str)
 
-    export_4 = display_combined_table(df_4_main, df_4_total)
+    export_4 = display_combined_table(df_4_main, df_4_total, show_total=show_total)
     st.divider()
 
     # ==================== 5. FATURAMENTO TOTAL ====================
@@ -380,7 +413,11 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
             d["Custo Médio Unitário"] = d["Custo Médio Unitário"].apply(brl)
             d['#'] = d['#'].astype(str)
 
-    export_5 = display_combined_table(df_5_main, df_5_total)
+    export_5 = display_combined_table(
+        df_5_main, df_5_total, 
+        show_total=show_total,
+        column_config=get_cmu_config(df_5_main.columns)
+    )
     st.divider()
 
     # ==================== 6. COMPARATIVO MÊS A MÊS ====================
@@ -448,7 +485,11 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
                     d.rename(columns={col: new_name}, inplace=True)
                     d[new_name] = d[new_name].apply(brl)
 
-        export_6 = display_combined_table(df_6_main, df_6_total)
+        export_6 = display_combined_table(
+            df_6_main, df_6_total, 
+            show_total=show_total,
+            column_config=get_cmu_config(df_6_main.columns)
+        )
     else:
         st.info("Sem dados mensais.")
         export_6 = None
@@ -517,11 +558,21 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
                 if "Faturamento" in col or "Custo" in col: d[col] = d[col].apply(brl)
                 if "Inserções" in col: d[col] = d[col].apply(format_int)
     
-    # Ordenação colunas
+    # Ordenação colunas - Agrupar por Tema (Fat 24, Fat 25, Ins 24, Ins 25...)
     final_cols = ["Cliente"]
     years = [ano_base, ano_comp] if ano_base != ano_comp else [ano_base]
-    for y in years:
-        final_cols.extend([f"Faturamento ({y})", f"Inserções ({y})", f"Custo Médio Unitário ({y})"])
+    
+    # Define a ordem dos temas para comparação
+    metrics_order = [
+        ("Faturamento", "Faturamento"),
+        ("Inserções", "Inserções"),
+        ("Custo Médio Unitário", "Custo Médio Unitário")
+    ]
+    
+    for metric_name, prefix in metrics_order:
+        for y in years:
+            final_cols.append(f"{metric_name} ({y})")
+            
     final_cols.extend(["Faturamento Total", "Inserções Total", "Share %"])
     
     # Filtra existentes
@@ -531,7 +582,9 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
 
     export_7 = display_combined_table(
         df_7_main, df_7_total,
-        format_dict={"Share %": "{:.2f}%"}
+        format_dict={"Share %": "{:.2f}%"},
+        show_total=show_total,
+        column_config=get_cmu_config(df_7_main.columns)
     )
     st.divider()
 
@@ -546,14 +599,15 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
         @st.dialog("Opções de Exportação - Clientes & Faturamento")
         def export_dialog():
             
+            # Chaves padronizadas com " (Dados)"
             table_options = {
-                "1. Clientes (Emissora)": {'df': export_1},
-                "2. Fat. + Inserções (Emissora)": {'df': export_2},
-                "3. Fat. + Inserções (Executivo)": {'df': export_3},
-                "4. Médias Completas (Cliente)": {'df': export_4},
-                "5. Fat. Total (Emissora)": {'df': export_5},
-                "6. Comp. (Mês a Mês)": {'df': export_6},
-                "7. Relação Clientes Detalhada": {'df': export_7},
+                "1. Número de Clientes por Emissora (Comparativo) (Dados)": {'df': export_1},
+                "2. Faturamento por Emissora (com Eficiência) (Dados)": {'df': export_2},
+                "3. Faturamento por Executivo (com Eficiência) (Dados)": {'df': export_3},
+                "4. Médias por Cliente (Investimento e Inserções) (Dados)": {'df': export_4},
+                "5. Faturamento por Emissora (Total) (Dados)": {'df': export_5},
+                "6. Comparativo mês a mês (Dados)": {'df': export_6},
+                "7. Relação de Clientes Detalhada (Dados)": {'df': export_7},
             }
             
             # Filtra apenas o que existe
@@ -575,10 +629,18 @@ def render(df, mes_ini, mes_fim, show_labels, ultima_atualizacao=None):
             try:
                 def get_filter_string():
                     f = st.session_state 
-                    return (f"Período: {f.get('filtro_ano_ini')}-{f.get('filtro_ano_fim')} ...")
+                    ano_ini = f.get("filtro_ano_ini", "N/A")
+                    ano_fim = f.get("filtro_ano_fim", "N/A")
+                    emis = ", ".join(f.get("filtro_emis", ["Todas"]))
+                    execs = ", ".join(f.get("filtro_execs", ["Todos"]))
+                    meses = ", ".join(f.get("filtro_meses_lista", ["Todos"]))
+                    clientes = ", ".join(f.get("filtro_clientes", ["Todos"])) if f.get("filtro_clientes") else "Todos"
+                    
+                    return (f"Período (Ano): {ano_ini} a {ano_fim} | Meses: {meses} | "
+                            f"Emissoras: {emis} | Executivos: {execs} | Clientes: {clientes}")
 
                 filtro_str = get_filter_string()
-                zip_data = create_zip_package(tables_to_export, filtro_str)
+                zip_data = create_zip_package(tables_to_export, filtro_str, excel_filename="Dashboard_Clientes_Faturamento.xlsx")
                 st.download_button("Clique para baixar", data=zip_data, file_name="Dashboard_Clientes_Faturamento.zip", mime="application/zip", on_click=lambda: st.session_state.update(show_clientes_export=False), type="secondary")
             except Exception as e:
                 st.error(f"Erro ao gerar ZIP: {e}")
