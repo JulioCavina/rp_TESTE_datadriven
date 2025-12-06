@@ -9,8 +9,7 @@ from googleapiclient.http import MediaIoBaseDownload
 from .format import normalize_dataframe
 
 # Função interna para baixar e processar do Drive
-# O TTL de 3600 segundos garante atualização a cada 1 hora
-@st.cache_data(ttl=3600, show_spinner="Baixando dados do Google Drive...")
+@st.cache_data(ttl=3600, show_spinner="Carregando do Data Lake...")
 def fetch_from_drive():
     """
     Conecta ao Google Drive usando st.secrets, baixa o arquivo
@@ -24,7 +23,6 @@ def fetch_from_drive():
 
     try:
         # 2. Configura Credenciais
-        # Converte o objeto st.secrets (AtriDict) para dicionário padrão
         service_account_info = dict(st.secrets["gcp_service_account"])
         
         creds = service_account.Credentials.from_service_account_info(
@@ -47,7 +45,7 @@ def fetch_from_drive():
         while not done:
             status, done = downloader.next_chunk()
         
-        file_io.seek(0) # Retorna o ponteiro para o início do arquivo
+        file_io.seek(0)
         
         # 6. Lê o Excel e Normaliza
         df_raw = pd.read_excel(file_io, engine="openpyxl")
@@ -57,22 +55,18 @@ def fetch_from_drive():
             return None, "Dados Vazios"
 
         # 7. Determina a data de atualização
-        # Tenta pegar metadados do arquivo no Drive para saber data de modificação real
         file_metadata = service.files().get(fileId=file_id, fields="modifiedTime").execute()
         mod_time_str = file_metadata.get("modifiedTime")
         
         if mod_time_str:
-            # Formato do Drive: 2024-12-06T14:00:00.000Z
             mod_dt = datetime.strptime(mod_time_str[:19], "%Y-%m-%dT%H:%M:%S")
             ultima_atualizacao = mod_dt.strftime("%d/%m/%Y %H:%M")
         else:
-            # Fallback para data atual do download
             ultima_atualizacao = datetime.now().strftime("%d/%m/%Y %H:%M")
             
         return df, ultima_atualizacao
 
     except Exception as e:
-        # Retorna o erro para ser tratado fora, mas loga no console
         print(f"Erro no Drive: {e}")
         st.error(f"Erro ao conectar com Google Drive: {e}")
         return None, None
@@ -82,7 +76,7 @@ def load_main_base():
     """
     Carrega a base principal.
     Prioridade:
-    1. Procura em st.session_state (se o usuário fez upload manual na sessão - OVERRIDE).
+    1. Procura em st.session_state (se o usuário fez upload manual na sessão).
     2. Tenta baixar do Google Drive (cacheado por 1h).
     Retorna (df, data_modificação) ou (None, None) se falhar.
     """
@@ -91,7 +85,6 @@ def load_main_base():
     if "uploaded_dataframe" in st.session_state and st.session_state.uploaded_dataframe is not None:
         df = st.session_state.uploaded_dataframe
         data_modificacao = st.session_state.get("uploaded_timestamp", "Upload Manual")
-        # Pequeno aviso visual para saber que está usando upload manual
         st.toast("Usando arquivo carregado manualmente.", icon="📂")
         return df, data_modificacao
 
@@ -106,5 +99,5 @@ def load_main_base():
 
 
 def load_crowley_base():
-    """Placeholder para base Crowley (não usada atualmente)."""
+    """Placeholder para base Crowley."""
     return None, None
