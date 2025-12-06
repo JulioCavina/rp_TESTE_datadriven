@@ -7,6 +7,35 @@ import numpy as np
 from utils.format import brl, PALETTE
 from utils.export import create_zip_package 
 
+# ==================== ESTILO CSS (CENTRALIZAÇÃO E ALINHAMENTO) ====================
+ST_METRIC_CENTER = """
+<style>
+/* Container principal do Metric: Flexbox vertical centralizado */
+[data-testid="stMetric"] {
+    display: flex;
+    flex-direction: column;
+    align-items: center; 
+    justify-content: center; 
+    text-align: center;
+    width: 100%;
+    margin: auto;
+}
+
+/* Rótulo (Título do Card) */
+[data-testid="stMetricLabel"] {
+    justify-content: center;
+    width: 100%;
+    margin-bottom: 0px !important; 
+}
+
+/* Valor (Número Grande) */
+[data-testid="stMetricValue"] {
+    justify-content: center;
+    width: 100%;
+}
+</style>
+"""
+
 def format_int(val):
     if pd.isna(val) or val == 0: return "-"
     return f"{int(val):,}".replace(",", ".")
@@ -32,6 +61,9 @@ def display_styled_table(df, highlight_total=True, column_config=None):
     )
 
 def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=None):
+    # Aplica CSS para centralizar os cards
+    st.markdown(ST_METRIC_CENTER, unsafe_allow_html=True)
+    
     st.markdown("<h2 style='text-align: center; color: #003366;'>Eficiência & KPIs Avançados</h2>", unsafe_allow_html=True)
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
@@ -147,15 +179,23 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
         fig_scatter.add_hline(y=avg_y, line_dash="dot", annotation_text="Preço Médio", annotation_position="bottom right")
         fig_scatter.add_vline(x=avg_x, line_dash="dot", annotation_text="Vol. Médio", annotation_position="top right")
 
-        fig_scatter.update_layout(height=500)
-        st.plotly_chart(fig_scatter, width="stretch")
+        # BLOQUEIO DE INTERAÇÃO (Zoom/Pan fixos)
+        fig_scatter.update_layout(
+            height=500,
+            dragmode=False, # Desabilita ferramenta de seleção/arrasto
+            xaxis=dict(fixedrange=True), # Trava eixo X
+            yaxis=dict(fixedrange=True)  # Trava eixo Y
+        )
+        
+        # config={'displayModeBar': False} remove a barra de ferramentas do Plotly
+        st.plotly_chart(fig_scatter, width="stretch", config={'displayModeBar': False})
     else:
         st.warning(f"Sem dados de inserções para o ano {titulo_matriz}.")
 
-    # ==================== TABELA DETALHADA (AFETADA PELO FILTRO) ====================
-    # Inicializa DF para exportação
+    # ==================== TABELAS DE EXPORTAÇÃO (INICIALIZAÇÃO) ====================
     df_matriz_export = pd.DataFrame()
-
+    
+    # ==================== TABELA DETALHADA (AFETADA PELO FILTRO) ====================
     with st.expander(f"Ver dados detalhados da Matriz ({titulo_matriz})", expanded=True):
         if not scatter_data.empty:
             df_table = scatter_data.copy()
@@ -166,7 +206,6 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
             df_table["Insercoes_fmt"] = df_table["Insercoes"].apply(format_int)
             
             # Seleção e Ordenação (Inserções ANTES de Faturamento)
-            # Ordem interna para processamento
             df_table = df_table[["cliente", "emissora", "Insercoes_fmt", "Faturamento_fmt", "Custo_Medio_fmt"]]
             
             # Renomeia para UI
@@ -178,7 +217,7 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
             # Display com Tooltip
             display_styled_table(
                 df_table, 
-                highlight_total=False, # Matriz detalhada geralmente não tem totalizador de soma direta
+                highlight_total=False,
                 column_config={
                     "CMU": st.column_config.Column(
                         label="CMU ℹ️",
@@ -205,7 +244,6 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
     st.subheader("2. Resumo de Eficiência por Emissora (Comparativo Anual)")
     
     # Pivotagem para separar por ano
-    # Agrupa Emissora + Ano
     grp_ano = base_periodo.groupby(["emissora", "ano"]).agg(
         Faturamento=("faturamento", "sum"),
         Insercoes=("insercoes", "sum")
@@ -217,7 +255,7 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
     
     # Garante colunas dos anos base e comp se não existirem
     # CORREÇÃO: Evitar duplicidade se anos forem iguais
-    anos_check = list(set([ano_base, ano_comp]))
+    anos_check = sorted(list(set([ano_base, ano_comp])))
     
     for ano in anos_check:
         if f"Faturamento_{ano}" not in grp_ano.columns: grp_ano[f"Faturamento_{ano}"] = 0.0

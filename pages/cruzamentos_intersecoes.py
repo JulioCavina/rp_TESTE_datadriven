@@ -26,7 +26,6 @@ def display_styled_table(df):
         is_total = False
         if "Emissora" in df.columns and row["Emissora"] == "Totalizador": is_total = True
         elif "Cliente" in df.columns and row["Cliente"] == "Totalizador": is_total = True
-        # CORREÇÃO: Removido o fallback que pintava a última linha sempre
         
         if is_total:
             return ['background-color: #e6f3ff; font-weight: bold; color: #003366'] * len(row)
@@ -393,7 +392,12 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
                     fig_mat.add_annotation(x=mat_raw.columns[j], y=mat_raw.index[i], text=z_text[i][j], showarrow=False, font=dict(color=text_colors_2d[i][j]))
 
         fig_mat.update_layout(height=420, template="plotly_white", margin=dict(l=0, r=10, t=10, b=0))
-        st.plotly_chart(fig_mat, width="stretch")
+        
+        # --- TRAVA DE INTERAÇÃO (HEATMAP) ---
+        fig_mat.update_xaxes(fixedrange=True)
+        fig_mat.update_yaxes(fixedrange=True)
+        
+        st.plotly_chart(fig_mat, width="stretch", config={'displayModeBar': False})
         
     st.divider()
 

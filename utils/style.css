@@ -1,9 +1,22 @@
 /*utils/style.css*/
 
+/* ==================== REMOVER ÂNCORAS (CORRENTINHAS) ==================== */
+[data-testid="stHeaderActionElements"] {
+    display: none !important;
+}
+
 /* ==================== CUSTOMIZAÇÃO GERAL (DESKTOP) ==================== */
 :root {
     --azul-nb: #007bff;
     --azul-escuro: #004a99;
+}
+
+/* --- REMOÇÃO DE MARGENS DO CABEÇALHO/RODAPÉ (GLOBAL) --- */
+.block-container {
+    padding-top: 1.5rem !important; 
+    padding-bottom: 1rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
 }
 
 /* Ajuste fino nos selects e multiselects */
@@ -39,7 +52,6 @@
 }
 
 /* ==================== FORÇAR BOTÕES AZUIS (NOVABRASIL) ==================== */
-/* Botão Primário (Ativo/Cheio) */
 button[kind="primary"] {
     background-color: var(--azul-nb) !important;
     border-color: var(--azul-nb) !important;
@@ -51,7 +63,6 @@ button[kind="primary"]:hover, button[kind="primary"]:focus {
     color: white !important;
 }
 
-/* Botão Secundário (Borda) */
 button[kind="secondary"] {
     background-color: transparent !important;
     color: var(--azul-nb) !important;
@@ -181,22 +192,21 @@ label, .stMarkdown h3, .stMarkdown h4 {
     font-weight: 600 !important;
 }
 
-/* ==================== FOOTER ==================== */
+/* ==================== FOOTER (COMPACTO) ==================== */
 .footer-container {
-    position: fixed;
-    bottom: 0;
-    left: 0;
+    position: relative;
     width: 100%;
     background-color: #f1f1f1;
     text-align: center;
-    padding: 8px 0;
-    font-size: 0.8rem;
+    padding: 10px 0;
+    margin-top: 20px;
+    font-size: 0.75rem;
     color: #555;
     border-top: 1px solid #ddd;
-    z-index: 999;
+    display: block;
 }
-.footer-text { margin: 0; padding: 0; line-height: 1.4; }
-.footer-date { font-weight: 600; color: #003366; margin-bottom: 4px; }
+.footer-text { margin: 0; padding: 0; line-height: 1.3; }
+.footer-date { font-weight: 600; color: #003366; margin-bottom: 2px; }
 
 
 /* ========================================================================== */
@@ -205,89 +215,120 @@ label, .stMarkdown h3, .stMarkdown h4 {
 
 @media only screen and (max-width: 768px) {
     
-    /* --- 1. MELHORIA GERAL DE ESPAÇAMENTO --- */
+    /* --- 1. MELHORIA GERAL DE ESPAÇAMENTO (MOBILE) --- */
     .block-container {
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
-        padding-top: 2rem !important; /* Menos espaço no topo */
+        padding-top: 1rem !important; 
+        padding-bottom: 2rem !important;
     }
 
     /* --- 2. GRID 2x2 PARA CARDS (METRICS) --- */
-    [data-testid="stMetric"] {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 10px 0;
-        margin-bottom: 10px !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    
-    [data-testid="column"] {
-        width: 50% !important;
-        flex: 1 1 50% !important;
-        min-width: 140px !important;
-        padding: 0 4px !important;
-    }
-    
-    /* Exceção: Colunas de filtros (Selectbox/Button) devem ocupar 100% */
-    [data-testid="stHorizontalBlock"] [data-testid="column"]:has([data-baseweb="select"]),
-    [data-testid="stHorizontalBlock"] [data-testid="column"]:has(button) {
-        width: 100% !important;
-        flex: 1 1 100% !important;
+    /* Container que segura os cards */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important; /* 2 Colunas Exatas */
+        gap: 10px !important; /* Espaçamento padrão */
+        padding: 0 2px !important;
+        flex-wrap: wrap !important;
     }
 
-    /* --- 3. FONTES MENORES (Compactação) --- */
-    h1, h2 { font-size: 1.5rem !important; }
+    /* As colunas individuais */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="column"] {
+        width: auto !important;
+        flex: 1 !important;
+        min-width: 0px !important; 
+        padding: 0 !important; 
+        margin: 0 !important;
+    }
+
+    /* Estilo do Card (Fundo) - DISTRIBUIÇÃO VERTICAL CORRIGIDA */
+    [data-testid="stMetric"] {
+        background-color: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 12px 4px !important; /* Padding vertical levemente maior */
+        margin: 0 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        height: 100% !important; /* Ocupa altura total do grid */
+        min-height: 90px !important; /* Altura mínima garantida */
+        
+        display: flex;
+        flex-direction: column;
+        /* AQUI: Distribui Título, Valor e Delta igualmente no eixo Y */
+        justify-content: space-evenly !important; 
+        align-items: center;
+    }
+
+    /* --- FONTS REDUZIDAS (Cards) --- */
+    /* Título do Card */
+    [data-testid="stMetricLabel"] div, [data-testid="stMetricLabel"] p {
+        font-size: 0.7rem !important;
+        text-align: center !important;
+        line-height: 1.2 !important;
+        white-space: normal !important;
+    }
+    
+    /* Valor do Card */
+    [data-testid="stMetricValue"] div {
+        font-size: 0.95rem !important;
+        font-weight: 700 !important;
+    }
+    
+    /* Delta (Variação) */
+    [data-testid="stMetricDelta"] div, [data-testid="stMetricDelta"] svg {
+        font-size: 0.65rem !important;
+    }
+
+    /* --- 3. EXCEÇÕES (Para não quebrar filtros e botões) --- */
+    [data-testid="stHorizontalBlock"] [data-testid="column"]:has([data-baseweb="select"]),
+    [data-testid="stHorizontalBlock"] [data-testid="column"]:has(button) {
+        grid-column: span 2 !important; /* Ocupa as 2 colunas */
+        width: 100% !important;
+    }
+
+    /* --- 4. TEXTOS GERAIS --- */
+    h1, h2 { font-size: 1.4rem !important; }
     h3, .custom-chart-title { font-size: 1rem !important; }
     p, label, .stMarkdown { font-size: 0.9rem !important; }
     
-    /* --- 4. TABELAS (DATAFRAMES) --- */
+    /* --- 5. TABELAS --- */
     [data-testid="stDataFrame"] {
         font-size: 0.75rem !important;
     }
     
-    /* --- 5. SIDEBAR (MENU) MAIS TOCÁVEL --- */
+    /* --- 6. SIDEBAR --- */
     .sidebar-nav-btn {
         padding: 12px 10px !important;
         font-size: 1rem !important;
         margin-bottom: 8px !important;
     }
     
-    /* --- 6. GRÁFICOS (PLOTLY) --- */
+    /* --- 7. GRÁFICOS (PLOTLY) --- */
     .js-plotly-plot {
         min-height: 350px !important;
     }
 
-    /* --- 7. RODAPÉ (FOOTER) --- */
+    /* --- 8. RODAPÉ --- */
     .footer-container {
         font-size: 0.65rem;
-        padding: 5px 0;
+        padding: 10px 0; 
+        margin-top: 15px; 
     }
     
-    /* --- 8. LINK DE VOLTAR --- */
-    .nav-back-link {
-        font-size: 0.8rem;
-        padding: 10px;
-        background-color: #f0f2f6;
-        border-radius: 8px;
-        width: 100%;
-        justify-content: center;
-        margin-bottom: 10px;
-    }
-
     /* --- 9. PÁGINA INÍCIO (BOTÕES) --- */
-    /* Sobrescreve o grid fixo do inicio.py para ser flexível e menor */
     .nb-grid {
-        grid-template-columns: repeat(2, 1fr) !important; /* 2 Colunas Flexíveis */
-        grid-template-rows: auto !important; /* Altura automática */
-        gap: 10px !important; /* Menor espaçamento */
+        grid-template-columns: repeat(2, 1fr) !important;
+        grid-template-rows: auto !important;
+        gap: 10px !important;
         width: 100% !important;
         padding: 0 5px !important;
     }
     
     .nb-card {
-        width: 100% !important; /* Ocupa a célula do grid */
-        height: 85px !important; /* Altura reduzida (era 110px) */
-        font-size: 0.85rem !important; /* Fonte menor */
+        width: 100% !important;
+        height: 85px !important;
+        font-size: 0.85rem !important;
         border-radius: 10px !important;
     }
 }

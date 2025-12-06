@@ -253,11 +253,15 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
         fig.update_layout(height=400, showlegend=False, template="plotly_white")
         fig.update_yaxes(tickvals=tick_values, ticktext=tick_texts, range=[0, y_axis_cap], title=y_label)
         
+        # --- TRAVA DE INTERAÇÃO ---
+        fig.update_xaxes(fixedrange=True)
+        fig.update_yaxes(fixedrange=True)
+        
         if show_labels:
             format_func = format_pt_br_abrev if is_currency else format_int_abrev
             fig.update_traces(text=top10_raw.head(10)[y_col].apply(format_func), textposition='outside')
         
-        st.plotly_chart(fig, width="stretch") 
+        st.plotly_chart(fig, width="stretch", config={'displayModeBar': False}) 
     else: 
         st.info("Sem dados para essa seleção (ou valores zerados).")
 

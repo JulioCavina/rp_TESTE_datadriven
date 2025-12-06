@@ -1,79 +1,107 @@
 # utils/loaders.py
-import os
+import io
 import pandas as pd
 import streamlit as st
 from datetime import datetime
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 from .format import normalize_dataframe
+
+# Função interna para baixar e processar do Drive
+# O TTL de 3600 segundos garante atualização a cada 1 hora
+@st.cache_data(ttl=3600, show_spinner="Baixando dados do Google Drive...")
+def fetch_from_drive():
+    """
+    Conecta ao Google Drive usando st.secrets, baixa o arquivo
+    definido em secrets.drive_files.faturamento_xlsx e retorna
+    o DataFrame processado e a data da última atualização.
+    """
+    # 1. Verifica se os secrets existem
+    if "gcp_service_account" not in st.secrets or "drive_files" not in st.secrets:
+        st.error("❌ Erro: Segredos de configuração (Secrets) não encontrados ou incompletos.")
+        return None, None
+
+    try:
+        # 2. Configura Credenciais
+        # Converte o objeto st.secrets (AtriDict) para dicionário padrão
+        service_account_info = dict(st.secrets["gcp_service_account"])
+        
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info,
+            scopes=['https://www.googleapis.com/auth/drive.readonly']
+        )
+        
+        # 3. Constrói o Serviço
+        service = build('drive', 'v3', credentials=creds)
+        
+        # 4. Obtém o ID do arquivo
+        file_id = st.secrets["drive_files"]["faturamento_xlsx"]
+        
+        # 5. Baixa o arquivo para memória (BytesIO)
+        request = service.files().get_media(fileId=file_id)
+        file_io = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_io, request)
+        
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        
+        file_io.seek(0) # Retorna o ponteiro para o início do arquivo
+        
+        # 6. Lê o Excel e Normaliza
+        df_raw = pd.read_excel(file_io, engine="openpyxl")
+        df = normalize_dataframe(df_raw)
+        
+        if df.empty:
+            return None, "Dados Vazios"
+
+        # 7. Determina a data de atualização
+        # Tenta pegar metadados do arquivo no Drive para saber data de modificação real
+        file_metadata = service.files().get(fileId=file_id, fields="modifiedTime").execute()
+        mod_time_str = file_metadata.get("modifiedTime")
+        
+        if mod_time_str:
+            # Formato do Drive: 2024-12-06T14:00:00.000Z
+            mod_dt = datetime.strptime(mod_time_str[:19], "%Y-%m-%dT%H:%M:%S")
+            ultima_atualizacao = mod_dt.strftime("%d/%m/%Y %H:%M")
+        else:
+            # Fallback para data atual do download
+            ultima_atualizacao = datetime.now().strftime("%d/%m/%Y %H:%M")
+            
+        return df, ultima_atualizacao
+
+    except Exception as e:
+        # Retorna o erro para ser tratado fora, mas loga no console
+        print(f"Erro no Drive: {e}")
+        st.error(f"Erro ao conectar com Google Drive: {e}")
+        return None, None
+
 
 def load_main_base():
     """
     Carrega a base principal.
     Prioridade:
-    1. Procura em st.session_state (se o usuário fez upload).
-    2. Procura na pasta /data (arquivo .xlsx).
-    Retorna (df, data_modificação) ou (None, None) se nada for encontrado.
+    1. Procura em st.session_state (se o usuário fez upload manual na sessão - OVERRIDE).
+    2. Tenta baixar do Google Drive (cacheado por 1h).
+    Retorna (df, data_modificação) ou (None, None) se falhar.
     """
     
-    # --- 1. Verifica se o usuário já fez upload de um arquivo nesta sessão ---
+    # --- 1. Verifica Upload Manual (Override Temporário) ---
     if "uploaded_dataframe" in st.session_state and st.session_state.uploaded_dataframe is not None:
         df = st.session_state.uploaded_dataframe
-        data_modificacao = st.session_state.get("uploaded_timestamp", "Sessão Atual")
+        data_modificacao = st.session_state.get("uploaded_timestamp", "Upload Manual")
+        # Pequeno aviso visual para saber que está usando upload manual
+        st.toast("Usando arquivo carregado manualmente.", icon="📂")
         return df, data_modificacao
 
-    # --- 2. Se não houver, procura na pasta /data ---
-    base_dir = os.path.dirname(os.path.dirname(__file__)) 
-    data_dir = os.path.join(base_dir, "data")
+    # --- 2. Tenta carregar do Drive (Automático) ---
+    df_drive, data_drive = fetch_from_drive()
+    
+    if df_drive is not None:
+        return df_drive, data_drive
 
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir) # Cria a pasta se não existir
-
-    try:
-        excel_files = [f for f in os.listdir(data_dir) if f.lower().endswith(".xlsx")]
-    except FileNotFoundError:
-        st.error(f"❌ Erro: O diretório '{data_dir}' não foi encontrado.")
-        return None, None
-
-    if excel_files:
-        file_path = os.path.join(data_dir, excel_files[0]) # Pega o primeiro .xlsx que encontrar
-        try:
-            df_raw = pd.read_excel(file_path, engine="openpyxl")
-            df = normalize_dataframe(df_raw)
-            if df.empty:
-                st.warning("⚠️ Base encontrada, mas sem dados válidos.")
-                return None, None
-
-            # --- NOVA LÓGICA: PEGAR ÚLTIMO MÊS/ANO DA BASE ---
-            ultima_atualizacao = "N/A" 
-            if "data_ref" in df.columns and pd.api.types.is_datetime64_any_dtype(df["data_ref"]):
-                
-                # Pega a data mais recente válida
-                latest_date = df["data_ref"].max()
-                
-                if pd.notna(latest_date):
-                    latest_month = latest_date.month
-                    latest_year = latest_date.year
-                    # Formata como MM/YYYY (02d garante o zero à esquerda)
-                    ultima_atualizacao = f"{latest_month:02d}/{latest_year}"
-                else:
-                    ultima_atualizacao = "Data Inválida"
-
-            else:
-                # Fallback para o tempo de modificação do arquivo se data_ref não estiver disponível
-                mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-                ultima_atualizacao = mod_time.strftime("%d/%m/%Y")
-            # --- FIM DA NOVA LÓGICA ---
-
-            # Salva no cache da sessão para não precisar ler do disco toda hora
-            st.session_state.uploaded_dataframe = df
-            st.session_state.uploaded_timestamp = ultima_atualizacao
-            
-            return df, ultima_atualizacao
-        
-        except Exception as e:
-            st.error(f"Erro ao ler base {file_path}: {e}")
-            return None, None
-
-    # --- 3. Se não encontrou em nenhum lugar ---
+    # --- 3. Se falhar tudo ---
     return None, None
 
 

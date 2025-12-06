@@ -11,11 +11,10 @@ from utils.export import create_zip_package
 
 # ==================== MAPA DE CORES ====================
 COLOR_MAP = {
-    "Novabrasil": "#6fa8dc",   # Azul suave
-    "Difusora": "#9f86c0",     # Roxo/Lilás
-    "Thathi Tv": "#93c47d",    # Verde suave
-    "Th+ Prime": "#76a5af",    # Azul acinzentado
-    # Fallback para variações de escrita
+    "Novabrasil": "#6fa8dc",   
+    "Difusora": "#9f86c0",     
+    "Thathi Tv": "#93c47d",    
+    "Th+ Prime": "#76a5af",    
     "novabrasil": "#6fa8dc",
     "difusora": "#9f86c0",
     "thathi tv": "#93c47d",
@@ -29,8 +28,8 @@ ST_METRIC_CENTER = """
 [data-testid="stMetric"] {
     display: flex;
     flex-direction: column;
-    align-items: center; /* Centraliza horizontalmente o bloco */
-    justify-content: center; /* Centraliza verticalmente se houver altura fixa */
+    align-items: center; 
+    justify-content: center; 
     text-align: center;
     width: 100%;
     margin: auto;
@@ -40,7 +39,7 @@ ST_METRIC_CENTER = """
 [data-testid="stMetricLabel"] {
     justify-content: center;
     width: 100%;
-    margin-bottom: 0px !important; /* Aproxima do valor */
+    margin-bottom: 0px !important; 
 }
 
 /* Valor (Número Grande) */
@@ -53,7 +52,7 @@ ST_METRIC_CENTER = """
 [data-testid="stMetricDelta"] {
     justify-content: center;
     width: 100%;
-    margin-top: 0px !important; /* Aproxima do valor */
+    margin-top: 0px !important; 
 }
 </style>
 """
@@ -66,6 +65,10 @@ def format_pt_br_abrev(val):
     if val_abs >= 1_000_000: return f"{sign}R$ {val_abs/1_000_000:,.1f} Mi".replace(",", "X").replace(".", ",").replace("X", ".")
     if val_abs >= 1_000: return f"{sign}R$ {val_abs/1_000:,.0f} mil".replace(",", "X").replace(".", ",").replace("X", ".")
     return brl(val)
+
+def format_int(val):
+    if pd.isna(val) or val == 0: return "-"
+    return f"{int(val):,}".replace(",", ".")
 
 def get_pretty_ticks(max_val, num_ticks=5):
     if max_val <= 0: return [0], ["R$ 0"], 100 
@@ -83,20 +86,20 @@ def get_pretty_ticks(max_val, num_ticks=5):
     return tick_values, tick_texts, y_axis_cap
 
 def get_top_client_info(df_base):
-    """Retorna nome completo, valor e nome abreviado do maior cliente."""
     if df_base.empty:
         return "—", 0.0, "—"
-    
     top_series = df_base.groupby("cliente")["faturamento"].sum().sort_values(ascending=False)
     if top_series.empty:
         return "—", 0.0, "—"
-        
     nome_full = top_series.index[0]
     valor = top_series.iloc[0]
-    
-    # Trunca nome muito longo para exibição no card (visual), mas mantém full para tooltip
     nome_display = nome_full[:18] + "..." if len(nome_full) > 18 else nome_full
     return nome_full, valor, nome_display
+
+# ==================== FUNÇÃO AUXILIAR DE TABELA ====================
+def display_styled_table(df):
+    if df.empty: return
+    st.dataframe(df, width="stretch", hide_index=True)
 
 def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=None):
     # Aplica CSS para centralizar os cards e aproximar título/valor
@@ -104,17 +107,11 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
 
     # Título Centralizado
     st.markdown("<h2 style='text-align: center; color: #003366;'>Visão Geral</h2>", unsafe_allow_html=True)
-    
-    # REMOVIDO: Caption de data aqui (já existe no rodapé)
-    # if ultima_atualizacao:
-    #     st.caption(f"📅 Dados atualizados até: {ultima_atualizacao}")
-    
     st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
     evol_raw = pd.DataFrame()
     base_emis_raw = pd.DataFrame()
     base_exec_raw = pd.DataFrame()
-    fig_evol = go.Figure()
     
     # Dicionário para armazenar figuras das roscas para exportação
     figs_share_dict = {}
@@ -171,17 +168,13 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
     c4.metric(f"Δ % ({ano_comp_str} vs {ano_base_str})", f"{delta_pct:.2f}%" if totalA > 0 else "—")
 
     # ==================== KPI LINHA 2: TICKET MÉDIO E MAIOR CLIENTE ====================
-    # Ticket Médio Base A (Menor Ano)
     cliA = baseA["cliente"].nunique()
     tmA = totalA / cliA if cliA > 0 else 0.0
     
-    # Ticket Médio Base B (Maior Ano)
     cliB = baseB["cliente"].nunique()
     tmB = totalB / cliB if cliB > 0 else 0.0
 
-    # Maior Cliente Base A
     full_A, val_A, disp_A = get_top_client_info(baseA)
-    # Maior Cliente Base B
     full_B, val_B, disp_B = get_top_client_info(baseB)
 
     st.markdown("<div style='height: 25px;'></div>", unsafe_allow_html=True) 
@@ -194,101 +187,38 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
     k3.metric(
         label=f"Maior Cliente ({ano_base})", 
         value=format_pt_br_abrev(val_A),
-        delta=disp_A, # Nome abreviado visível
+        delta=disp_A, 
         delta_color="off",
-        help=f"Cliente: {full_A}" # Tooltip com nome completo
+        help=f"Cliente: {full_A}"
     )
     
     k4.metric(
         label=f"Maior Cliente ({ano_comp})", 
         value=format_pt_br_abrev(val_B),
-        delta=disp_B, # Nome abreviado visível
+        delta=disp_B, 
         delta_color="off",
-        help=f"Cliente: {full_B}" # Tooltip com nome completo
+        help=f"Cliente: {full_B}"
     )
 
     st.divider()
 
-    # ==================== GRÁFICO 1: EVOLUÇÃO MENSAL ====================
+    # ==================== 1. TABELA DE EVOLUÇÃO MENSAL ====================
     st.markdown("<p class='custom-chart-title'>1. Evolução Mensal de Faturamento e Inserções</p>", unsafe_allow_html=True)
     
     evol_raw = base_periodo.groupby(["ano", "meslabel", "mes"], as_index=False)[["faturamento", "insercoes"]].sum().sort_values(["ano", "mes"])
     
     if not evol_raw.empty:
-        fig_evol = make_subplots(specs=[[{"secondary_y": True}]])
-
-        # 1. Barras de Faturamento
-        fig_evol.add_trace(
-            go.Bar(
-                x=evol_raw["meslabel"],
-                y=evol_raw["faturamento"],
-                name="Faturamento",
-                marker_color=PALETTE[0],
-                opacity=0.85
-            ),
-            secondary_y=False
-        )
-
-        # 2. Linha de Inserções
-        fig_evol.add_trace(
-            go.Scatter(
-                x=evol_raw["meslabel"],
-                y=evol_raw["insercoes"],
-                name="Inserções",
-                mode='lines+markers',
-                line=dict(color='#dc2626', width=3),
-                marker=dict(size=6)
-            ),
-            secondary_y=True
-        )
-
-        # Eixos
-        max_y_fat = evol_raw['faturamento'].max()
-        tick_vals, tick_txt, y_cap_fat = get_pretty_ticks(max_y_fat)
+        # Prepara Tabela para Visualização
+        evol_display = evol_raw[["meslabel", "faturamento", "insercoes"]].copy()
         
-        fig_evol.update_yaxes(
-            title_text="Faturamento (R$)", 
-            tickvals=tick_vals, ticktext=tick_txt, 
-            range=[0, y_cap_fat], secondary_y=False,
-            showgrid=True, gridcolor='#f0f0f0'
-        )
+        # Formatação
+        evol_display["faturamento"] = evol_display["faturamento"].apply(brl)
+        evol_display["insercoes"] = evol_display["insercoes"].apply(format_int)
         
-        max_y_ins = evol_raw['insercoes'].max()
-        y_cap_ins = max_y_ins * 1.2 if max_y_ins > 0 else 10
-        fig_evol.update_yaxes(
-            title_text="Inserções (Qtd)", 
-            range=[0, y_cap_ins], secondary_y=True,
-            showgrid=False
-        )
-
-        fig_evol.update_layout(
-            height=400, 
-            legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center"), 
-            template="plotly_white",
-            margin=dict(l=20, r=20, t=20, b=20)
-        )
+        # Renomeia
+        evol_display.columns = ["Mês/Ano", "Faturamento", "Inserções"]
         
-        if show_labels:
-            for i, row in evol_raw.iterrows():
-                fig_evol.add_annotation(
-                    x=row["meslabel"], y=row["faturamento"], 
-                    text=format_pt_br_abrev(row["faturamento"]),
-                    showarrow=False, yshift=10, 
-                    font=dict(size=10, color="black"),
-                    bgcolor="rgba(255, 255, 255, 0.8)", borderpad=2,
-                    secondary_y=False
-                )
-                if row["insercoes"] > 0:
-                    fig_evol.add_annotation(
-                        x=row["meslabel"], y=row["insercoes"], 
-                        text=str(int(row["insercoes"])),
-                        showarrow=False, yshift=15, 
-                        font=dict(size=10, color="#dc2626", weight="bold"),
-                        bgcolor="rgba(255, 255, 255, 0.7)", borderpad=2,
-                        yref="y2", secondary_y=True
-                    )
-
-        st.plotly_chart(fig_evol, width="stretch") 
+        display_styled_table(evol_display)
     else:
         st.info("Sem dados para o período selecionado.")
 
@@ -298,9 +228,9 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
     st.markdown("<p class='custom-chart-title'>2. Faturamento por Emissora (Ano a Ano)</p>", unsafe_allow_html=True)
     
     base_emis_raw = base_periodo.groupby(["emissora", "ano"], as_index=False)["faturamento"].sum()
-    
+    fig_emis = None
+
     if not base_emis_raw.empty:
-        # Ordenação e concatenação
         base_emis_raw = base_emis_raw.sort_values(["emissora", "ano"])
         base_emis_raw["label_x"] = base_emis_raw["emissora"] + " " + base_emis_raw["ano"].astype(str)
         
@@ -319,7 +249,10 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
         fig_emis.update_layout(
             height=400, xaxis_title=None, yaxis_title=None, 
             template="plotly_white", showlegend=True, legend_title="Emissora",
-            bargap=0.2
+            bargap=0.2,
+            dragmode=False,
+            xaxis=dict(fixedrange=True),
+            yaxis=dict(fixedrange=True)
         )
         fig_emis.update_traces(width=0.5) 
 
@@ -328,7 +261,7 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
         if show_labels:
             fig_emis.update_traces(text=base_emis_raw['faturamento'].apply(format_pt_br_abrev), textposition='outside')
             
-        st.plotly_chart(fig_emis, width="stretch")
+        st.plotly_chart(fig_emis, width="stretch", config={'displayModeBar': False})
     else:
         st.info("Sem dados.")
 
@@ -355,7 +288,6 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
                 )
                 fig_share.update_traces(textposition='inside', textinfo='percent+label')
                 
-                # Centralização do texto do ano
                 fig_share.add_annotation(
                     text=f"<b>{ano_share}</b>", 
                     x=0.5, y=0.5, 
@@ -369,13 +301,13 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
                     height=300, 
                     showlegend=False, 
                     margin=dict(l=10, r=10, t=10, b=10),
+                    dragmode=False
                 )
                 
-                # NOME CORRIGIDO: 3. Share de Faturamento (Gráfico 202X)
                 figs_share_dict[f"3. Share de Faturamento (Gráfico {ano_share})"] = fig_share
                 
                 with cols_share[idx]:
-                    st.plotly_chart(fig_share, width="stretch")
+                    st.plotly_chart(fig_share, width="stretch", config={'displayModeBar': False})
             else:
                 with cols_share[idx]:
                     st.info(f"Sem dados para {ano_share}")
@@ -388,7 +320,8 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
     st.markdown("<p class='custom-chart-title'>4. Faturamento por Executivo (Ano a Ano)</p>", unsafe_allow_html=True)
     
     base_exec_raw = base_periodo.groupby(["executivo", "ano"], as_index=False)["faturamento"].sum()
-    
+    fig_exec = None 
+
     if not base_exec_raw.empty:
         rank_exec = base_exec_raw.groupby("executivo")["faturamento"].sum().sort_values(ascending=False).index.tolist()
         base_exec_raw["executivo"] = pd.Categorical(base_exec_raw["executivo"], categories=rank_exec, ordered=True)
@@ -409,7 +342,10 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
         fig_exec.update_layout(
             height=450, xaxis_title=None, yaxis_title=None, 
             template="plotly_white", showlegend=False,
-            bargap=0.2
+            bargap=0.2,
+            dragmode=False,
+            xaxis=dict(fixedrange=True),
+            yaxis=dict(fixedrange=True)
         )
         fig_exec.update_traces(width=0.5)
 
@@ -418,11 +354,11 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
         if show_labels:
             fig_exec.update_traces(text=base_exec_raw['faturamento'].apply(format_pt_br_abrev), textposition='outside')
             
-        st.plotly_chart(fig_exec, width="stretch")
+        st.plotly_chart(fig_exec, width="stretch", config={'displayModeBar': False})
     else:
         st.info("Sem dados.")
 
-    # ==================== SEÇÃO DE EXPORTAÇÃO ====================
+    # ==================== SEÇÃO DE EXPORTAÇÃO (CENTRALIZADA) ====================
     st.divider()
     def get_filter_string():
         f = st.session_state 
@@ -435,31 +371,30 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
         return (f"Período (Ano): {ano_ini} a {ano_fim} | Meses: {meses} | "
                 f"Emissoras: {emis} | Executivos: {execs} | Clientes: {clientes}")
 
-    if st.button("📥 Exportar Dados da Página", type="secondary"):
-        st.session_state.show_visao_geral_export = True
+    # Lógica de Centralização do Botão
+    c_left, c_btn, c_right = st.columns([3, 2, 3])
+    with c_btn:
+        if st.button("Exportar Dados da Página", type="secondary", use_container_width=True):
+            st.session_state.show_visao_geral_export = True
     
     if ultima_atualizacao:
-        st.caption(f"📅 Última atualização da base de dados: {ultima_atualizacao}")
+        st.markdown(f"<div style='text-align: center; color: grey; font-size: 0.8rem; margin-top: 5px;'>Última atualização da base de dados: {ultima_atualizacao}</div>", unsafe_allow_html=True)
 
     if st.session_state.get("show_visao_geral_export", False):
         @st.dialog("Opções de Exportação - Visão Geral")
         def export_dialog():
-            # MONTAGEM LINEAR DO DICIONÁRIO (COM NOMES REAIS)
             final_ordered_options = {}
 
-            # 1. Evolução (CORRIGIDO: Colunas e Nomes)
+            # 1. Evolução (AGORA TABELA)
             if not evol_raw.empty:
                 df_evol_exp = evol_raw[["ano", "meslabel", "mes", "faturamento", "insercoes"]].copy()
                 df_evol_exp.columns = ["Ano", "Mês", "Mês ID", "Faturamento", "Inserções"]
-                
                 final_ordered_options["1. Evolução Mensal de Faturamento e Inserções (Dados)"] = {'df': df_evol_exp}
-                final_ordered_options["1. Evolução Mensal de Faturamento e Inserções (Gráfico)"] = {'fig': fig_evol}
 
             # 2. Emissora (CORRIGIDO: Remover label_x)
             if not base_emis_raw.empty:
                 df_emis_exp = base_emis_raw[["emissora", "ano", "faturamento"]].copy()
                 df_emis_exp.columns = ["Emissora", "Ano", "Faturamento"]
-                
                 final_ordered_options["2. Faturamento por Emissora (Dados)"] = {'df': df_emis_exp}
                 final_ordered_options["2. Faturamento por Emissora (Gráfico)"] = {'fig': fig_emis if not base_emis_raw.empty else None}
 
@@ -467,9 +402,7 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
             if not base_emis_raw.empty:
                 df_share_exp = base_emis_raw[["emissora", "ano", "faturamento"]].copy()
                 df_share_exp.columns = ["Emissora", "Ano", "Faturamento"]
-                
                 final_ordered_options["3. Share de Faturamento (Dados)"] = {'df': df_share_exp}
-                # Adiciona as roscas individuais
                 for name, fig in figs_share_dict.items():
                     final_ordered_options[name] = {'fig': fig}
 
@@ -477,7 +410,6 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
             if not base_exec_raw.empty:
                 df_exec_exp = base_exec_raw[["executivo", "ano", "faturamento"]].copy()
                 df_exec_exp.columns = ["Executivo", "Ano", "Faturamento"]
-                
                 final_ordered_options["4. Faturamento por Executivo (Dados)"] = {'df': df_exec_exp}
                 final_ordered_options["4. Faturamento por Executivo (Gráfico)"] = {'fig': fig_exec if not base_exec_raw.empty else None}
 
@@ -501,12 +433,17 @@ def render(df, mes_ini, mes_fim, show_labels, show_total, ultima_atualizacao=Non
 
             try:
                 filtro_str = get_filter_string()
-                # NOME DO ARQUIVO EXCEL INTERNO
                 nome_interno_excel = "Dashboard_Visao_Geral.xlsx"
-                
                 zip_data = create_zip_package(tables_to_export, filtro_str, excel_filename=nome_interno_excel) 
                 
-                st.download_button("Clique para baixar o pacote", data=zip_data, file_name="Dashboard_VisaoGeral.zip", mime="application/zip", on_click=lambda: st.session_state.update(show_visao_geral_export=False), type="secondary")
+                st.download_button(
+                    label="Clique para baixar", 
+                    data=zip_data, 
+                    file_name="Dashboard_VisaoGeral.zip", 
+                    mime="application/zip", 
+                    on_click=lambda: st.session_state.update(show_visao_geral_export=False), 
+                    type="secondary"
+                )
             except Exception as e:
                 st.error(f"Erro ao gerar ZIP: {e}")
 
