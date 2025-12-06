@@ -1,115 +1,118 @@
 # pages/inicio.py
-
 import streamlit as st
-from PIL import Image
-import os
+import pandas as pd
 
 def render(df=None):
-    # ==================== CSS DO GRID 2x3 (AJUSTADO PARA 7 ITENS) ====================
-    st.markdown("""
-        <style>
-        .nb-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            width: 100%;
-            margin-top: 2rem;
-        }
-
-        .nb-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 240px);
-            /* CORREÇÃO: Aumentado para 3 linhas para caber o 7º item sem quebrar */
-            grid-template-rows: repeat(3, 130px);
-            gap: 1.5rem;
-            justify-content: center;
-        }
+    st.markdown("### Bem-vindo ao Sistema de Inteligência de Mercado")
+    
+    # Status da base (se carregada)
+    if df is not None and not df.empty:
+        total_linhas = len(df)
         
-        .nb-card {
-            background-color: #007dc3;
-            border: 2px solid white;
-            border-radius: 15px;
-            color: white !important;
-            text-decoration: none !important; 
-            font-size: 1rem;
-            font-weight: 600;
-            height: 120px;
-            width: 240px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
-            transition: all 0.25s ease-in-out;
+        # Tenta pegar a data de atualização mais recente
+        if "data_ref" in df.columns:
+            max_date = df["data_ref"].max()
+            data_str = max_date.strftime("%d/%m/%Y") if pd.notna(max_date) else "N/A"
+        else:
+            data_str = "Desconhecida"
+            
+        st.info(f"✅ Base de Vendas carregada com sucesso! | Registros: {total_linhas} | Última referência: {data_str}")
+    
+    st.markdown("---")
+    st.markdown("##### Selecione um módulo para iniciar:")
+
+    # Estilo dos Cards (CSS Inline para garantir funcionamento rápido no componente)
+    card_style = """
+    <div style="
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        height: 100%;
+        background-color: white;
+        transition: transform 0.2s, box-shadow 0.2s;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    " onmouseover="this.style.transform='translateY(-5px)';this.style.boxShadow='0 4px 10px rgba(0,0,0,0.1)'" 
+       onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'">
+        <div>
+            <h4 style="color: #004a99; margin-bottom: 10px;">{title}</h4>
+            <p style="color: #666; font-size: 0.9rem;">{desc}</p>
+        </div>
+        <a href="?nav={nav_idx}" target="_self" style="
+            display: inline-block;
+            margin-top: 15px;
+            text-decoration: none;
+            color: white;
+            background-color: #007bff;
+            padding: 8px 16px;
+            border-radius: 5px;
             text-align: center;
-        }
-        
-        .nb-card:hover {
-            background-color: #00a8e0;
-            transform: scale(1.05);
-            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.25);
-            text-decoration: none !important; 
-        }
-
-        .nb-card:active {
-            transform: scale(0.97);
-            background-color: #004b8d;
-        }
-
-        @media (max-width: 900px) {
-            .nb-grid {
-                grid-template-columns: repeat(2, 200px);
-            }
-            .nb-card {
-                width: 200px;
-                height: 110px;
-            }
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-
-    # ==================== LOGO ====================
-    logo_candidates = [
-        os.path.join("assets", "NOVABRASIL_TH+_LOGOS_VETORIAIS-07.png"),
-    ]
-    logo_path = next((p for p in logo_candidates if os.path.exists(p)), None)
-
-    if logo_path:
-        logo = Image.open(logo_path)
-        st.image(logo, width=240)
-    else:
-        pass
-
-    # ==================== INTRODUÇÃO ====================
-    st.markdown("""
-    ## Bem-vindo(a)!
-    Este painel foi desenvolvido para a equipe da **Novabrasil** com o objetivo de oferecer uma visão completa sobre o desempenho comercial e de marketing da região de **Ribeirão Preto**.
-    """)
-
-    st.markdown("### Acesse diretamente uma das seções:")
-
-    # ==================== BOTÕES HTML CLICÁVEIS ====================
-    # ATUALIZADO: Links corretos para as novas páginas (índices atualizados)
-    # 1: Visão Geral
-    # 2: Clientes
-    # 3: Perdas
-    # 4: Cruzamentos
-    # 5: Top 10
-    # 6: Relatório ABC (Antigo Crowley)
-    # 7: Eficiência (Novo)
-    
-    st.markdown("""
-    <div class="nb-container">
-      <div class="nb-grid">
-        <a href="?nav=1" target="_self" class="nb-card">Visão Geral</a>
-        <a href="?nav=2" target="_self" class="nb-card">Clientes & Faturamento</a>
-        <a href="?nav=3" target="_self" class="nb-card">Perdas & Ganhos</a>
-        <a href="?nav=4" target="_self" class="nb-card">Cruzamentos & Interseções</a>
-        <a href="?nav=5" target="_self" class="nb-card">Top 10 Anunciantes</a>
-        <a href="?nav=6" target="_self" class="nb-card">Relatório ABC</a>
-        <a href="?nav=7" target="_self" class="nb-card">Eficiência / KPIs</a>
-      </div>
+            font-weight: 600;
+            font-size: 0.85rem;
+        ">Acessar &rarr;</a>
     </div>
-    """, unsafe_allow_html=True)
+    """
+
+    # Layout em Grid (2 Colunas para melhor visualização)
+    c1, c2, c3, c4 = st.columns(4)
+    
+    with c1:
+        st.markdown(card_style.format(
+            title="Visão Geral", 
+            desc="KPIs principais, atingimento de metas e performance geral.", 
+            nav_idx=1
+        ), unsafe_allow_html=True)
+        
+    with c2:
+        st.markdown(card_style.format(
+            title="Clientes & Faturamento", 
+            desc="Detalhamento por agência, cliente, executivo e tabelas completas.", 
+            nav_idx=2
+        ), unsafe_allow_html=True)
+
+    with c3:
+        st.markdown(card_style.format(
+            title="Perdas & Ganhos", 
+            desc="Análise de Churn, novos clientes e recuperação.", 
+            nav_idx=3
+        ), unsafe_allow_html=True)
+        
+    with c4:
+        st.markdown(card_style.format(
+            title="Relatório Crowley", 
+            desc="Monitoramento musical, spots e concorrência (Rádio).", 
+            nav_idx=8  # Index 8 na lista pages_keys
+        ), unsafe_allow_html=True)
+
+    st.markdown("<div style='height: 20px'></div>", unsafe_allow_html=True)
+
+    c5, c6, c7, c8 = st.columns(4)
+
+    with c5:
+        st.markdown(card_style.format(
+            title="Cruzamentos", 
+            desc="Clientes exclusivos vs. compartilhados entre emissoras.", 
+            nav_idx=4
+        ), unsafe_allow_html=True)
+
+    with c6:
+        st.markdown(card_style.format(
+            title="Top 10", 
+            desc="Ranking dos maiores anunciantes e setores.", 
+            nav_idx=5
+        ), unsafe_allow_html=True)
+        
+    with c7:
+        st.markdown(card_style.format(
+            title="Relatório ABC", 
+            desc="Curva de Pareto (80/20) e concentração de carteira.", 
+            nav_idx=6
+        ), unsafe_allow_html=True)
+        
+    with c8:
+        st.markdown(card_style.format(
+            title="Eficiência", 
+            desc="Preço médio, ocupação e eficiência comercial.", 
+            nav_idx=7
+        ), unsafe_allow_html=True)
